@@ -82,6 +82,11 @@ body {
   line-height: 1.55;
 }
 
+.chat-message p {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
 .chat-message strong {
   display: block;
   margin-bottom: 0.25rem;
@@ -109,6 +114,41 @@ body {
   line-height: 1.5;
   resize: vertical;
 }
+
+.file-uploader {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1rem;
+  border-radius: 0.75rem;
+  border: 1px dashed rgba(148, 163, 184, 0.4);
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.95rem;
+  background: rgba(15, 23, 42, 0.6);
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.file-uploader:hover {
+  border-color: rgba(94, 234, 212, 0.8);
+  background: rgba(15, 23, 42, 0.75);
+}
+
+.file-uploader input[type="file"] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.file-uploader[disabled],
+.file-uploader--disabled,
+.file-uploader input[type="file"][disabled] {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 
 .button {
   align-self: flex-end;
