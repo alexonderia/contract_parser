@@ -1,0 +1,1 @@
+"""Contract Parser backend application."""
