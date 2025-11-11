@@ -1,21 +1,17 @@
 import ChatPanel from "./components/ChatPanel";
-import SpecificationExtractorPanel from "./components/SpecificationExtractorPanel";
-import "./App.css";
 
 function App() {
   return (
-    <div className="layout">
-      <header className="layout__header">
+    <div className="app-container">
+      <header className="app-header">
         <h1>Contract Parser</h1>
-        <p>Извлечение спецификаций из договоров и чат с моделью</p>
+        <p>
+          Эта демо-страница отправляет ваши вопросы на Ollama, где запущена модель
+          <code> qwen2.5:1.5b</code>.
+        </p>
       </header>
-      <main className="layout__content">
-        <section className="layout__column">
-          <SpecificationExtractorPanel />
-        </section>
-        <section className="layout__column">
-          <ChatPanel />
-        </section>
+      <main className="app-main">
+        <ChatPanel />
       </main>
     </div>
   );

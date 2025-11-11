@@ -15,9 +15,8 @@ services:
       context: ./backend
     container_name: contract_parser_backend
     environment:
-      - CONTRACT_PARSER_OLLAMA_BASE_URL=http://ollama:11434
-      - CONTRACT_PARSER_SPECIFICATION_MODEL=llama3
-      - CONTRACT_PARSER_CHAT_MODEL=llama3
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - OLLAMA_MODEL=qwen2.5:1.5b
     depends_on:
       - ollama
     ports:
@@ -27,9 +26,11 @@ services:
   frontend:
     build:
       context: ./frontend
+      args:
+        VITE_API_BASE_URL: http://localhost:8080
     container_name: contract_parser_frontend
     environment:
-      - VITE_API_BASE_URL=http://localhost:8000
+      - VITE_API_BASE_URL=http://localhost:8080
     ports:
       - "3000:80"
     depends_on:

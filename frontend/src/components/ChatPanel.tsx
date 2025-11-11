@@ -1,69 +1,98 @@
-import { useState } from "react";
-import axios from "axios";
+import { type KeyboardEventHandler, useMemo, useState } from "react";
 import { resolveApiUrl } from "../api/client";
 
+type ChatRole = "user" | "assistant";
+
 interface ChatMessage {
-  role: "user" | "assistant";
+  role: ChatRole;
   content: string;
 }
 
-const initialMessages: ChatMessage[] = [
-  {
-    role: "assistant",
-    content: "Здравствуйте! Я помогу вам извлечь спецификацию из договора или ответить на вопросы.",
-  },
-];
+const welcomeMessage: ChatMessage = {
+  role: "assistant",
+  content: "Здравствуйте! Задайте вопрос, и я отвечу, используя модель Qwen2.5.",
+};
 
-function ChatPanel() {
+const historyLimit = 6;
+
+async function requestModelReply(payload: { message: string; history: ChatMessage[] }): Promise<string> {
+  const response = await fetch(resolveApiUrl("/api/chat"), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => null);
+    throw new Error(data?.detail ?? data?.error ?? "Не удалось получить ответ от сервера");
+  }
+
+  const data = await response.json();
+  return data.reply ?? "";
+}
+
+function useChatState(initialMessages: ChatMessage[]) {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const sendMessage = async () => {
-    if (!input.trim()) {
+    const trimmed = input.trim();
+    if (!trimmed || isLoading) {
       return;
     }
-    const nextMessages = [...messages, { role: "user" as const, content: input }];
-    setMessages(nextMessages);
+    
+    const userMessage: ChatMessage = { role: "user", content: trimmed };
+    const payloadHistory = messages.slice(-(historyLimit - 1));
+    setMessages((prev) => [...prev, userMessage]);
     setInput("");
-    setLoading(true);
+    setIsLoading(true);
     setError(null);
 
     try {
-      const response = await axios.post(resolveApiUrl("/api/chat"), {
-        message: input,
-        history: nextMessages.slice(-5).map((message) => ({
-          role: message.role,
-          content: message.content,
-        })),
+      const reply = await requestModelReply({
+        message: trimmed,
+        history: payloadHistory,
       });
-      const reply: ChatMessage = {
-        role: "assistant",
-        content: response.data.reply ?? "",
-      };
-      setMessages((prev) => [...prev, reply]);
+      setMessages((prev) => [...prev, { role: "assistant", content: reply || "(пустой ответ)" }]);
     } catch (err) {
-      console.error(err);
-      setError("Не удалось получить ответ. Проверьте подключение к серверу.");
+      const description = err instanceof Error ? err.message : "Произошла неизвестная ошибка";
+      setError(description);
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
-
-  const handleKeyDown: React.KeyboardEventHandler<HTMLTextAreaElement> = (event) => {
+const handleKeyDown: KeyboardEventHandler<HTMLTextAreaElement> = (event) => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       void sendMessage();
     }
   };
 
+  return {
+    messages,
+    input,
+    isLoading,
+    error,
+    setInput,
+    sendMessage,
+    handleKeyDown,
+  } as const;
+}
+
+function ChatPanel() {
+  const initial = useMemo(() => [welcomeMessage], []);
+  const { messages, input, isLoading, error, setInput, sendMessage, handleKeyDown } = useChatState(initial);
+
   return (
-    <div className="panel">
-      <h2>Чат с моделью</h2>
+    <div className="panel chat-panel">
+      <h2>Чат с Qwen2.5</h2>
       <div className="chat-panel__messages">
         {messages.map((message, index) => (
-          <div key={index} className={`chat-message chat-message--${message.role}`}>
+          <div key={`${message.role}-${index}`} className={`chat-message chat-message--${message.role}`}>
             <strong>{message.role === "user" ? "Вы" : "Модель"}</strong>
             <p>{message.content}</p>
           </div>
@@ -71,18 +100,17 @@ function ChatPanel() {
       </div>
       <textarea
         className="chat-panel__input"
-        placeholder="Напишите сообщение..."
+        placeholder="Введите сообщение и нажмите Enter"
         value={input}
         onChange={(event) => setInput(event.target.value)}
         onKeyDown={handleKeyDown}
         rows={3}
       />
-      <button className="button" onClick={sendMessage} disabled={loading}>
-        {loading ? "Отправка..." : "Отправить"}
+      <button className="button" type="button" onClick={sendMessage} disabled={isLoading}>
+        {isLoading ? "Отправка..." : "Отправить"}
       </button>
       {error && <p className="panel__error">{error}</p>}
     </div>
   );
 }
-
 export default ChatPanel;
