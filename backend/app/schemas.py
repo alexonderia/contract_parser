@@ -18,6 +18,14 @@ class ChatRequest(BaseModel):
     )
 
 
+class SimpleChatRequest(BaseModel):
+    message: str = Field(..., description="Сообщение пользователя")
+    system_prompt: str | None = Field(
+        default=None,
+        description="Необязательное системное сообщение, влияющее на стиль ответа",
+    )
+
+
 class ChatResponse(BaseModel):
     reply: str = Field(..., description="Ответ модели")
     raw: dict[str, Any] = Field(..., description="Неформатированный ответ Ollama")
@@ -51,3 +59,8 @@ class SpecificationResponse(BaseModel):
     start_anchor: SpecificationAnchor = Field(..., description="Начальная точка раздела")
     end_anchor: SpecificationAnchor = Field(..., description="Конечная точка раздела")
     tables: list[SpecificationTable] = Field(..., description="Обнаруженные таблицы раздела")
+
+class CroppedSpecResponse(BaseModel):
+    specification: SpecificationResponse = Field(...)
+    cropped_file_base64: str = Field(..., description="DOCX файла, base64 без префикса data:")
+    cropped_file_name: str = Field(..., description="Имя файла для сохранения на клиенте")

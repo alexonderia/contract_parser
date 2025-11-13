@@ -6,6 +6,8 @@ services:
     container_name: contract_parser_ollama
     ports:
       - "11434:11434"
+    environment:
+      - OLLAMA_CONTEXT_LENGTH=8192
     volumes:
       - ollama_data:/root/.ollama
     restart: unless-stopped

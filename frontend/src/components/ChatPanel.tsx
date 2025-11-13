@@ -4,40 +4,46 @@ import {
   useMemo,
   useState,
 } from "react";
-import { resolveApiUrl } from "../api/client";
-import { uploadSpecificationDocument, type SpecificationResponse } from "../api/specification";
+import {
+  uploadSpecificationDocument,
+  type SpecificationResponse,
+} from "../api/specification";
+import SpecificationPreview from "./SpecificationPreview";
+import {
+  type ChatHistoryMessage,
+  type ChatReply,
+  type ChatRole,
+  sendChatMessage,
+  sendSimpleChatMessage,
+} from "../api/chat";
 
-type ChatRole = "user" | "assistant";
 
-interface ChatMessage {
+interface BaseChatMessage {
   role: ChatRole;
   content: string;
 }
 
+type TextChatMessage = BaseChatMessage & {
+  kind: "text";
+};
+
+type SpecificationChatMessage = BaseChatMessage & {
+  kind: "specification";
+  filename: string;
+  specification: SpecificationResponse;
+  
+};
+
+type ChatMessage = TextChatMessage | SpecificationChatMessage;
+
 const welcomeMessage: ChatMessage = {
   role: "assistant",
+  kind: "text",
   content: "Здравствуйте! Задайте вопрос, и я отвечу, используя модель Qwen2.5.",
 };
 
-const historyLimit = 6;
+const historyLimit = 8;
 
-async function requestModelReply(payload: { message: string; history: ChatMessage[] }): Promise<string> {
-  const response = await fetch(resolveApiUrl("/api/chat"), {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
-
-  if (!response.ok) {
-    const data = await response.json().catch(() => null);
-    throw new Error(data?.detail ?? data?.error ?? "Не удалось получить ответ от сервера");
-  }
-
-  const data = await response.json();
-  return data.reply ?? "";
-}
 
 function useChatState(initialMessages: ChatMessage[]) {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
@@ -51,7 +57,7 @@ function useChatState(initialMessages: ChatMessage[]) {
       return;
     }
     
-    const userMessage: ChatMessage = { role: "user", content: trimmed };
+    const userMessage: ChatMessage = { role: "user", kind: "text", content: trimmed };
     const payloadHistory = messages.slice(-(historyLimit - 1));
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
@@ -59,11 +65,22 @@ function useChatState(initialMessages: ChatMessage[]) {
     setError(null);
 
     try {
-      const reply = await requestModelReply({
-        message: trimmed,
-        history: payloadHistory,
-      });
-      setMessages((prev) => [...prev, { role: "assistant", content: reply || "(пустой ответ)" }]);
+      const historyPayload: ChatHistoryMessage[] = payloadHistory.map((item) => ({
+        role: item.role,
+        content: item.content,
+      }));
+      const hasUserHistory = historyPayload.some((item) => item.role === "user");
+
+      let reply: ChatReply;
+      if (!hasUserHistory) {
+        reply = await sendSimpleChatMessage(trimmed);
+      } else {
+        reply = await sendChatMessage(trimmed, historyPayload);
+      }
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", kind: "text", content: reply.reply || "(пустой ответ)" },
+      ]);
     } catch (err) {
       const description = err instanceof Error ? err.message : "Произошла неизвестная ошибка";
       setError(description);
@@ -77,7 +94,6 @@ function useChatState(initialMessages: ChatMessage[]) {
       void sendMessage();
     }
   };
-
   return {
     messages,
     input,
@@ -93,44 +109,34 @@ function useChatState(initialMessages: ChatMessage[]) {
 }
 
 function formatSpecificationReply(result: SpecificationResponse, filename: string): string {
-  const lines = [
-    `📎 Документ «${filename}»`,
-    "🔍 Найден раздел «Спецификация»:",
-    `• Заголовок: ${result.heading}`,
-    `• Начало (#${result.start_anchor.index + 1}, ${result.start_anchor.type === "table" ? "таблица" : "параграф"}): ${result.start_anchor.preview}`,
-    `• Конец (#${result.end_anchor.index + 1}, ${result.end_anchor.type === "table" ? "таблица" : "параграф"}): ${result.end_anchor.preview}`,
-    `• Таблиц в разделе: ${result.tables.length}`,
+  const parts = [
+    `🔍 Найдена спецификация в документе «${filename}».`,
+    `Таблиц: ${result.tables.length}.`,
   ];
 
-  if (result.tables.length > 0) {
-    lines.push("", "Таблицы:");
-    result.tables.forEach((table, idx) => {
-      lines.push(
-        `  ${idx + 1}. #${table.index + 1} — ${table.row_count}×${table.column_count} строк/столбцов`,
-        `     ↳ начало (#${table.start_anchor.index + 1}, ${table.start_anchor.type}): ${table.start_anchor.preview}`,
-        `     ↳ конец (#${table.end_anchor.index + 1}, ${table.end_anchor.type}): ${table.end_anchor.preview}`,
-        `     Предпросмотр: ${table.preview}`,
-      );
+  const firstAnchor = result.tables[0]?.start_anchor ?? result.start_anchor;
+  parts.push(
+    `Начало: блок #${firstAnchor.index + 1} (${firstAnchor.type}). ` +
+      `Конец: блок #${result.end_anchor.index + 1} (${result.end_anchor.type}).`,
+  );
 
-      if (table.rows.length > 0) {
-        const rowPreview = table.rows.slice(0, 5);
-        rowPreview.forEach((row, rowIndex) => {
-          lines.push(`     [${rowIndex + 1}] ${row.join(" | ")}`);
-        });
-        if (table.rows.length > rowPreview.length) {
-          lines.push(`     … ещё ${table.rows.length - rowPreview.length} строк(и)`);
-        }
-      }
-    });
-  }
-
-  return lines.join("\n");
+  return parts.join(" ");
 }
 
 function ChatPanel() {
   const initial = useMemo(() => [welcomeMessage], []);
-  const { messages, input, isLoading, error, setInput, sendMessage, handleKeyDown, setMessages, setError, setIsLoading } =
-    useChatState(initial);
+  const {
+    messages,
+    input,
+    isLoading,
+    error,
+    setInput,
+    sendMessage,
+    handleKeyDown,
+    setMessages,
+    setError,
+    setIsLoading,
+  } = useChatState(initial);
 
   const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -139,20 +145,38 @@ function ChatPanel() {
       return;
     }
 
-    setMessages((prev) => [...prev, { role: "user", content: `📄 Загрузил файл «${file.name}»` }]);
+    setMessages((prev) => [
+      ...prev,
+      { role: "user", kind: "text", content: `📄 Загрузил файл «${file.name}»` },
+    ]);
     setIsLoading(true);
     setError(null);
 
     try {
       const result = await uploadSpecificationDocument(file);
-      const formatted = formatSpecificationReply(result, file.name);
-      setMessages((prev) => [...prev, { role: "assistant", content: formatted }]);
+      const summary = formatSpecificationReply(result.specification, file.name);
+      
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          kind: "specification",
+          content: summary,
+          filename: file.name,
+          specification: result,
+        },
+      ]);
+
     } catch (err) {
       const description = err instanceof Error ? err.message : "Не удалось обработать документ";
       setError(description);
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: `⚠️ Не удалось проанализировать документ: ${description}` },
+        {
+          role: "assistant",
+          kind: "text",
+          content: `⚠️ Не удалось проанализировать документ: ${description}`,
+        },
       ]);
     } finally {
       setIsLoading(false);
@@ -161,12 +185,25 @@ function ChatPanel() {
 
   return (
     <div className="panel chat-panel">
-      <h2>Чат с Qwen2.5</h2>
+      <h2>Чат</h2>
       <div className="chat-panel__messages">
         {messages.map((message, index) => (
-          <div key={`${message.role}-${index}`} className={`chat-message chat-message--${message.role}`}>
+          <div
+            key={`${message.kind}-${index}`}
+            className={`chat-message chat-message--${message.role}`}
+          >
             <strong>{message.role === "user" ? "Вы" : "Модель"}</strong>
-            <p>{message.content}</p>
+            {message.kind === "specification" ? (
+              <div className="chat-message__specification">
+                <p className="chat-message__summary">{message.content}</p>
+                <SpecificationPreview
+                  filename={message.filename}
+                  specification={message.specification}
+                />
+              </div>
+            ) : (
+              <p>{message.content}</p>
+            )}
           </div>
         ))}
       </div>

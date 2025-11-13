@@ -6,14 +6,20 @@ from typing import Any
 import httpx
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+import base64
+import tempfile
+from fastapi.responses import JSONResponse
 
 from .document_parser import UnsupportedDocumentError, extract_specification
 from .ollama import client
-from .sсhemas import (
+from .llm_utils import extract_reply
+from .neural_specification import detect_specification
+from .schemas import (
     ChatRequest,
     ChatResponse,
+    CroppedSpecResponse,
     HealthResponse,
-    SpecificationAnchor,
+    SimpleChatRequest,
     SpecificationResponse,
     SpecificationTable,
 )
@@ -30,24 +36,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-def _extract_reply(data: dict[str, Any]) -> str:
-    message = data.get("message") or {}
-    content = message.get("content") or message.get("text")
-    if isinstance(content, str):
-        return content.strip()
-    if isinstance(content, list):
-        return "\n".join(str(part) for part in content)
-    fallback = data.get("response") or data.get("reply") or ""
-    return str(fallback).strip()
-
-@app.post("/api/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest) -> ChatResponse:
-    messages = [
-        {"role": item.role, "content": item.content}
-        for item in request.history
-        if item.content.strip()
-    ]
-    messages.append({"role": "user", "content": request.message})
+# def _extract_reply(data: dict[str, Any]) -> str:
+#     message = data.get("message") or {}
+#     content = message.get("content") or message.get("text")
+#     if isinstance(content, str):
+#         return content.strip()
+#     if isinstance(content, list):
+#         return "\n".join(str(part) for part in content)
+#     fallback = data.get("response") or data.get("reply") or ""
+#     return str(fallback).strip()
+async def _perform_chat(messages: list[dict[str, str]]) -> ChatResponse:
     try:
         raw = await client.chat(messages)
     except httpx.HTTPStatusError as exc:  # pragma: no cover - defensive logging
@@ -57,8 +55,29 @@ async def chat(request: ChatRequest) -> ChatResponse:
         logger.error("Error talking to Ollama: %s", exc)
         raise HTTPException(status_code=502, detail="Не удалось подключиться к Ollama") from exc
 
-    reply = _extract_reply(raw) or "(пустой ответ)"
+    reply = extract_reply(raw) or "(пустой ответ)"
     return ChatResponse(reply=reply, raw=raw)
+
+@app.post("/api/chat", response_model=ChatResponse)
+async def chat(request: ChatRequest) -> ChatResponse:
+    messages = [
+        {"role": item.role, "content": item.content}
+        for item in request.history
+        if item.content.strip()
+    ]
+    messages.append({"role": "user", "content": request.message})
+
+    return await _perform_chat(messages)
+
+
+@app.post("/api/chat/simple", response_model=ChatResponse)
+async def simple_chat(request: SimpleChatRequest) -> ChatResponse:
+    messages: list[dict[str, str]] = []
+    if request.system_prompt and request.system_prompt.strip():
+        messages.append({"role": "system", "content": request.system_prompt.strip()})
+    messages.append({"role": "user", "content": request.message})
+
+    return await _perform_chat(messages)
 
 @app.get("/api/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
@@ -81,33 +100,62 @@ async def health() -> HealthResponse:
         model_available=model_available,
     )
 
-
-def _make_anchor(index: int, block_type: str, preview: str) -> SpecificationAnchor:
-    return SpecificationAnchor(index=index, type=block_type, preview=preview)
-
-
-def _make_table(index: int, rows: list[list[str]], start_index: int, end_index: int) -> SpecificationTable:
-    preview = " | ".join(rows[0]) if rows else ""
-    end_preview = " | ".join(rows[-1]) if rows else preview
-    column_count = max((len(row) for row in rows), default=0)
-    start_text = preview or "Таблица"
-    end_text = end_preview or start_text
-    return SpecificationTable(
-        index=index,
-        row_count=len(rows),
-        column_count=column_count,
-        preview=start_text[:200],
-        start_anchor=_make_anchor(start_index, "table", start_text[:200]),
-        end_anchor=_make_anchor(end_index, "table", end_text[:200]),
-        rows=rows,
-    )
-
-
 @app.post("/api/specification", response_model=SpecificationResponse)
 async def specification(file: UploadFile = File(...)) -> SpecificationResponse:
     payload = await file.read()
+    # try:
+    #     result = await detect_specification(file.filename or "", payload)
+    # except httpx.HTTPStatusError as exc:  # pragma: no cover - defensive logging
+    #     logger.error("Ollama returned HTTP %s: %s", exc.response.status_code, exc.response.text)
+    #     raise HTTPException(status_code=502, detail="Ollama вернула ошибку") from exc
+    # except httpx.HTTPError as exc:  # pragma: no cover - defensive logging
+    #     logger.error("Error talking to Ollama: %s", exc)
+    #     raise HTTPException(status_code=502, detail="Не удалось подключиться к Ollama") from exc
+    # except ValueError as exc:
+    #     raise HTTPException(status_code=404, detail=str(exc)) from exc
+    # except Exception as exc:  # pragma: no cover - defensive logging
+    #     logger.exception("Failed to process document '%s' via neural service", file.filename)
+    #     raise HTTPException(status_code=400, detail="Не удалось обработать документ") from exc
+    # return result
+
     try:
-        result = extract_specification(file.filename or "", payload)
+        spec = await detect_specification(file.filename or "", payload)
+        return spec
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Ошибка при обработке документа '%s'", file.filename)
+        raise HTTPException(status_code=400, detail="Не удалось обработать документ") from exc
+
+
+# Внутренняя обработка файла
+
+# def _make_anchor(index: int, block_type: str, preview: str) -> SpecificationAnchor:
+#     return SpecificationAnchor(index=index, type=block_type, preview=preview)
+
+
+# def _make_table(index: int, rows: list[list[str]], start_index: int, end_index: int) -> SpecificationTable:
+#     preview = " | ".join(rows[0]) if rows else ""
+#     end_preview = " | ".join(rows[-1]) if rows else preview
+#     column_count = max((len(row) for row in rows), default=0)
+#     start_text = preview or "Таблица"
+#     end_text = end_preview or start_text
+#     return SpecificationTable(
+#         index=index,
+#         row_count=len(rows),
+#         column_count=column_count,
+#         preview=start_text[:200],
+#         start_anchor=_make_anchor(start_index, "table", start_text[:200]),
+#         end_anchor=_make_anchor(end_index, "table", end_text[:200]),
+#         rows=rows,
+#     )
+
+
+# @app.post("/api/specification", response_model=SpecificationResponse)
+# async def specification(file: UploadFile = File(...)) -> SpecificationResponse:
+    payload = await file.read()
+    try:
+        result = await extract_specification(file.filename or "", payload)
     except UnsupportedDocumentError as exc:
         raise HTTPException(status_code=415, detail=str(exc)) from exc
     except ValueError as exc:

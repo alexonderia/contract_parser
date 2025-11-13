@@ -23,6 +23,12 @@ export interface SpecificationResponse {
   tables: SpecificationTable[];
 }
 
+export interface SpecificationFileResponse {
+  specification: SpecificationResponse;
+  cropped_file_name: string;
+  cropped_file_base64: string;
+}
+
 export async function uploadSpecificationDocument(file: File): Promise<SpecificationResponse> {
   const formData = new FormData();
   formData.append("file", file);
@@ -34,9 +40,10 @@ export async function uploadSpecificationDocument(file: File): Promise<Specifica
 
   if (!response.ok) {
     const payload = await response.json().catch(() => null);
-    const message = payload?.detail ?? payload?.error ?? "Не удалось обработать документ";
+    const message = payload?.detail ?? payload?.error
     throw new Error(message);
   }
 
   return (await response.json()) as SpecificationResponse;
+
 }
