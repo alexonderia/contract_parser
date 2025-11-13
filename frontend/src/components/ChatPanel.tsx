@@ -6,7 +6,10 @@ import {
 } from "react";
 import {
   uploadSpecificationDocument,
+  type SpecificationExtractionResponse,
+  type SpecificationMode,
   type SpecificationResponse,
+  type LlmDebugInfo,
 } from "../api/specification";
 import SpecificationPreview from "./SpecificationPreview";
 import {
@@ -17,10 +20,10 @@ import {
   sendSimpleChatMessage,
 } from "../api/chat";
 
-
 interface BaseChatMessage {
   role: ChatRole;
   content: string;
+  debug?: LlmDebugInfo | null;
 }
 
 type TextChatMessage = BaseChatMessage & {
@@ -30,8 +33,7 @@ type TextChatMessage = BaseChatMessage & {
 type SpecificationChatMessage = BaseChatMessage & {
   kind: "specification";
   filename: string;
-  specification: SpecificationResponse;
-  
+  specification: SpecificationResponse;  
 };
 
 type ChatMessage = TextChatMessage | SpecificationChatMessage;
@@ -44,6 +46,55 @@ const welcomeMessage: ChatMessage = {
 
 const historyLimit = 8;
 
+function formatSpecificationReply(
+  result: SpecificationResponse,
+  filename: string,
+  mode: SpecificationMode,
+): string {
+  const parts = [
+    `🔍 Найдена спецификация в документе «${filename}».`,
+    `Режим: ${mode === "ai" ? "ИИ" : "встроенный анализ"}.`,
+    `Таблиц: ${result.tables.length}.`,
+  ];
+
+  // const firstAnchor = result.tables[0]?.start_anchor ?? result.start_anchor;
+  const firstAnchor =  result.start_anchor;
+  parts.push(
+    `Начало: блок #${firstAnchor.index + 1} (${firstAnchor.type}). ` +
+      `Конец: блок #${result.end_anchor.index + 1} (${result.end_anchor.type}).`,
+  );
+
+  return parts.join(" ");
+}
+
+function DebugDetails({ debug }: { debug?: LlmDebugInfo | null }) {
+  if (!debug) {
+    return null;
+  }
+  return (
+    <details className="debug-details">
+      <summary>Показать промпт и ответ</summary>
+      <div className="debug-details__content">
+        <section>
+          <h4>Промпт (JSON)</h4>
+          <pre>{JSON.stringify(debug.prompt, null, 2)}</pre>
+        </section>
+        {/* <section>
+          <h4>Промпт (форматированный)</h4>
+          <pre>{debug.prompt_formatted}</pre>
+        </section> */}
+        <section>
+          <h4>Ответ (JSON)</h4>
+          <pre>{JSON.stringify(debug.response, null, 2)}</pre>
+        </section>
+        {/* <section>
+          <h4>Ответ (форматированный)</h4>
+          <pre>{debug.response_formatted}</pre>
+        </section> */}
+      </div>
+    </details>
+  );
+}
 
 function useChatState(initialMessages: ChatMessage[]) {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
@@ -79,7 +130,7 @@ function useChatState(initialMessages: ChatMessage[]) {
       }
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", kind: "text", content: reply.reply || "(пустой ответ)" },
+        { role: "assistant", kind: "text", content: reply.reply || "(пустой ответ)", debug: reply.debug },
       ]);
     } catch (err) {
       const description = err instanceof Error ? err.message : "Произошла неизвестная ошибка";
@@ -108,20 +159,6 @@ function useChatState(initialMessages: ChatMessage[]) {
   } as const;
 }
 
-function formatSpecificationReply(result: SpecificationResponse, filename: string): string {
-  const parts = [
-    `🔍 Найдена спецификация в документе «${filename}».`,
-    `Таблиц: ${result.tables.length}.`,
-  ];
-
-  const firstAnchor = result.tables[0]?.start_anchor ?? result.start_anchor;
-  parts.push(
-    `Начало: блок #${firstAnchor.index + 1} (${firstAnchor.type}). ` +
-      `Конец: блок #${result.end_anchor.index + 1} (${result.end_anchor.type}).`,
-  );
-
-  return parts.join(" ");
-}
 
 function ChatPanel() {
   const initial = useMemo(() => [welcomeMessage], []);
@@ -137,6 +174,7 @@ function ChatPanel() {
     setError,
     setIsLoading,
   } = useChatState(initial);
+  const [specMode, setSpecMode] = useState<SpecificationMode>("ai");
 
   const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -147,14 +185,14 @@ function ChatPanel() {
 
     setMessages((prev) => [
       ...prev,
-      { role: "user", kind: "text", content: `📄 Загрузил файл «${file.name}»` },
+      { role: "user", kind: "text", content: `Загрузил файл «${file.name}» для режима ${specMode}` },
     ]);
     setIsLoading(true);
     setError(null);
 
     try {
-      const result = await uploadSpecificationDocument(file);
-      const summary = formatSpecificationReply(result.specification, file.name);
+      const result: SpecificationExtractionResponse = await uploadSpecificationDocument(file, specMode);
+      const summary = formatSpecificationReply(result.specification, file.name, specMode);
       
       setMessages((prev) => [
         ...prev,
@@ -163,7 +201,8 @@ function ChatPanel() {
           kind: "specification",
           content: summary,
           filename: file.name,
-          specification: result,
+          specification: result.specification,
+          debug: result.debug,
         },
       ]);
 
@@ -200,12 +239,28 @@ function ChatPanel() {
                   filename={message.filename}
                   specification={message.specification}
                 />
+                <DebugDetails debug={message.debug} />
               </div>
             ) : (
-              <p>{message.content}</p>
+              <div>
+                <p>{message.content}</p>
+                <DebugDetails debug={message.debug} />
+              </div>
             )}
           </div>
         ))}
+      </div>
+      <div className="spec-mode">
+        <label htmlFor="spec-mode-select">Способ извлечения спецификации:</label>
+        <select
+          id="spec-mode-select"
+          value={specMode}
+          onChange={(event) => setSpecMode(event.target.value as SpecificationMode)}
+          disabled={isLoading}
+        >
+          <option value="ai">ИИ (через модель)</option>
+          <option value="internal">Внутренняя обработка</option>
+        </select>
       </div>
       <label className={`file-uploader${isLoading ? " file-uploader--disabled" : ""}`}>
         <input

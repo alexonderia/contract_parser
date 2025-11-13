@@ -1,4 +1,5 @@
 import { resolveApiUrl } from "./client";
+import type { LlmDebugInfo } from "./specification";
 
 export type ChatRole = "user" | "assistant" | "system";
 
@@ -10,6 +11,7 @@ export interface ChatHistoryMessage {
 export interface ChatReply {
   reply: string;
   raw: Record<string, unknown>;
+  debug?: LlmDebugInfo | null;
 }
 
 async function handleResponse(response: Response): Promise<ChatReply> {

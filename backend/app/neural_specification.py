@@ -1,38 +1,34 @@
 """Neural-network powered specification detection service."""
 from __future__ import annotations
 
-
-import base64
 import json
 import logging
 import re
-from io import BytesIO
-from pathlib import Path
-from typing import Any, Iterable, Union
+from collections import defaultdict
+from typing import Any
+from string import Template
 
-from docx import Document
-from docx.document import Document as _Document
-from docx.oxml.table import CT_Tbl
-from docx.oxml.text.paragraph import CT_P
-from docx.table import Table
-from docx.text.paragraph import Paragraph
-
-from .document_text import document_to_lines
-from .llm_utils import extract_reply
+from .document_models import Block
+from .document_processing import (
+    blocks_to_prompt_lines_with_mapping,
+    load_blocks,
+)
+from .llm_utils import build_debug_info, extract_reply
 from .ollama import client
-from .schemas import SpecificationAnchor, SpecificationResponse, SpecificationTable  # ← проверьте, что файл назван латинским 'schemas.py'
+from .schemas import LlmDebugInfo, SpecificationAnchor, SpecificationResponse, SpecificationTable
 
 logger = logging.getLogger("contract_parser.backend.neural_spec")
 
 _SYSTEM_PROMPT = """Вы анализируете контракты и находите разделы со спецификациями."""
 
-_USER_PROMPT_TEMPLATE = """
-    Ты анализируешь документ и должен найти раздел "СПЕЦИФИКАЦИЯ".
+_USER_PROMPT_TEMPLATE = Template("""
+Ты анализируешь документ и должен найти раздел "СПЕЦИФИКАЦИЯ".
 Этот раздел обычно начинается строкой, где встречается слово "СПЕЦИФИКАЦИЯ",
 и включает в себя одну или несколько таблиц ("TABLE:") и сопровождающий текст.
-
-Документ передаётся в виде пронумерованных строк. Строки, начинающиеся с "TABLE:", 
-соответствуют строкам таблицы.
+Заканчивается раздел строкой, где встречается фраза "Общая цена".
+Документ передаётся в виде пронумерованных строк.
+Найди диапазон строк, где начинается и заканчивается спецификация.
+Строки таблиц начинаются с "TABLE:".
 
 Если найден раздел со спецификацией, верни JSON строго следующего вида:
 
@@ -63,28 +59,14 @@ _USER_PROMPT_TEMPLATE = """
 Не добавляй текстовых комментариев, только JSON.
 
 Документ:
-{document}
-    """
+$document
+""")
 
 
 def _enumerate_document(lines: list[str]) -> str:
-    """Преобразует список строк/блоков в ровно те строки, которые мы показываем LLM."""
+    """Convert list of document lines to a numbered representation."""
     rows: list[str] = []
     for index, line in enumerate(lines):
-        if not isinstance(line, str):
-            # объект вашего Block: paragraph/table
-            if hasattr(line, "type") and getattr(line, "type") == "table":
-                table_rows = []
-                for r in (getattr(line, "rows", None) or []):
-                    joined = " | ".join(cell.strip() for cell in r if cell and str(cell).strip())
-                    if joined:
-                        table_rows.append(joined)
-                line = "TABLE: " + (" / ".join(table_rows) if table_rows else "(пустая таблица)")
-            elif hasattr(line, "text"):
-                line = str(getattr(line, "text") or "").strip()
-            else:
-                line = str(line)
-
         clean_line = str(line).replace("\n", " ").strip()
         if clean_line:
             rows.append(f"{index:04d}: {clean_line}")
@@ -102,28 +84,105 @@ def _coerce_index(value: Any) -> int:
 def _anchor_from_payload(
     payload: dict[str, Any],
     fallback_lines: list[str],
+    *,
+    default_type: str = "paragraph",
 ) -> SpecificationAnchor:
     line_index = _coerce_index(payload.get("line"))
     preview = str(payload.get("preview") or "").strip()
     if 0 <= line_index < len(fallback_lines) and not preview:
         preview = fallback_lines[line_index][:200]
-    return SpecificationAnchor(index=line_index, type="table", preview=preview[:200])
+    block_type = str(payload.get("type") or default_type)
+    if block_type not in {"paragraph", "table"}:
+        block_type = default_type
+    return SpecificationAnchor(index=line_index, type=block_type, preview=preview[:200])
 
+def _find_tables_in_section(
+    blocks: list[Block],
+    mapping: list[tuple[int, int]],
+    start_index: int,
+    end_index: int,
+) -> list[SpecificationTable]:
+    """Return tables present within the detected specification boundaries."""
 
+    if not mapping:
+        return []
 
-async def detect_specification(filename: str, payload: bytes) -> SpecificationResponse:
-    lines = document_to_lines(filename, payload)
+    total_lines = len(mapping)
+    if start_index < 0:
+        start_index = 0
+    if end_index < 0 or end_index >= total_lines:
+        end_index = total_lines - 1
+    if end_index < start_index:
+        end_index = total_lines - 1
+
+    block_line_positions: dict[int, list[int]] = defaultdict(list)
+    for line_index, (block_index, _) in enumerate(mapping):
+        block_line_positions[block_index].append(line_index)
+
+    seen_blocks: set[int] = set()
+    detected: list[SpecificationTable] = []
+
+    for line_index in range(start_index, min(end_index, total_lines - 1) + 1):
+        block_index, _ = mapping[line_index]
+        if block_index in seen_blocks:
+            continue
+
+        block = blocks[block_index]
+        if block.type != "table":
+            continue
+
+        rows = block.rows or []
+        if not rows:
+            continue
+
+        line_positions = block_line_positions.get(block_index) or []
+        if not line_positions:
+            continue
+
+        preview = " | ".join(rows[0])[:200]
+        end_preview = " | ".join(rows[-1])[:200]
+
+        start_anchor = SpecificationAnchor(
+            index=line_positions[0],
+            type="table",
+            preview=preview or "Таблица",
+        )
+        end_anchor = SpecificationAnchor(
+            index=line_positions[-1],
+            type="table",
+            preview=end_preview or preview or "Таблица",
+        )
+
+        detected.append(
+            SpecificationTable(
+                index=block_index,
+                row_count=len(rows),
+                column_count=max((len(row) for row in rows), default=0),
+                preview=preview or "Таблица",
+                start_anchor=start_anchor,
+                end_anchor=end_anchor,
+                rows=rows,
+            )
+        )
+        seen_blocks.add(block_index)
+
+    return detected
+
+async def detect_specification(filename: str, payload: bytes) -> tuple[SpecificationResponse, LlmDebugInfo]:
+    blocks = load_blocks(filename, payload)
+    lines, mapping = blocks_to_prompt_lines_with_mapping(blocks)
     enumerated = _enumerate_document(lines)
 
     messages = [
         {"role": "system", "content": _SYSTEM_PROMPT},
-        {"role": "user",  "content": _USER_PROMPT_TEMPLATE.format(document=enumerated)},
+        {"role": "user", "content": _USER_PROMPT_TEMPLATE.substitute(document=enumerated)},
     ]
 
     raw = await client.chat(messages)
+    debug = build_debug_info(messages, raw)
+
     reply = extract_reply(raw).strip()
 
-    # срезаем ```json ... ```
     reply = re.sub(r"^```(?:json)?\s*", "", reply, flags=re.I)
     reply = re.sub(r"\s*```$", "", reply)
 
@@ -137,37 +196,56 @@ async def detect_specification(filename: str, payload: bytes) -> SpecificationRe
         reason = str(data.get("reason") or "Раздел 'Спецификация' не найден")
         raise ValueError(reason)
 
-    # нормализуем структуру
     if "start" in data and "start_anchor" not in data:
         data["start_anchor"] = {**data["start"]}
     if "end" in data and "end_anchor" not in data:
         data["end_anchor"] = {**data["end"]}
 
-    start_anchor = _anchor_from_payload(data.get("start_anchor") or {})
-    end_anchor = _anchor_from_payload(data.get("end_anchor") or {})
+    start_anchor = _anchor_from_payload(data.get("start_anchor") or {}, lines)
+    end_anchor = _anchor_from_payload(data.get("end_anchor") or {}, lines)
 
     tables: list[SpecificationTable] = []
-    for t in data.get("tables") or []:
+    for table_payload in data.get("tables") or []:
         try:
-            start_t = _anchor_from_payload(t.get("start") or {})
-            end_t = _anchor_from_payload(t.get("end") or {})
+            start_t = _anchor_from_payload(
+                table_payload.get("start") or {},
+                lines,
+                default_type="table",
+            )
+            end_t = _anchor_from_payload(
+                table_payload.get("end") or {},
+                lines,
+                default_type="table",
+            )
             tables.append(
                 SpecificationTable(
-                    index=_coerce_index(t.get("index")),
-                    row_count=int(t.get("row_count") or 0),
-                    column_count=int(t.get("column_count") or 0),
-                    preview=str(t.get("preview") or "")[:200],
+                    index=_coerce_index(table_payload.get("index")),
+                    row_count=int(table_payload.get("row_count") or 0),
+                    column_count=int(table_payload.get("column_count") or 0),
+                    preview=str(table_payload.get("preview") or "")[:200],
                     start_anchor=start_t,
                     end_anchor=end_t,
-                    rows=t.get("rows") or [],
+                    rows=table_payload.get("rows") or [],
                 )
             )
-        except Exception:
+        except Exception:  # pragma: no cover - robust parsing
             continue
 
-    return SpecificationResponse(
+    specification = SpecificationResponse(
         heading=data.get("heading") or "СПЕЦИФИКАЦИЯ",
         start_anchor=start_anchor,
         end_anchor=end_anchor,
         tables=tables,
     )
+
+    detected_tables = _find_tables_in_section(blocks, mapping, start_anchor.index, end_anchor.index)
+    if detected_tables:
+        specification = specification.copy(update={"tables": detected_tables})
+
+    logger.info("LLM specification prompt: %s", debug.prompt_formatted)
+    logger.info("LLM specification response: %s", debug.response_formatted)
+
+    return specification, debug
+
+
+__all__ = ["detect_specification"]

@@ -31,17 +31,17 @@ function SpecificationTablePreview({ table, order }: TableProps) {
     <div className="specification-table">
       <header className="specification-table__header">
         <div className="specification-table__title">
-          Таблица {order} · #{table.index + 1}
+          Таблица {order} · #{table.index}
         </div>
         <div className="specification-table__meta">
           {table.row_count} строк · {table.column_count} столбцов
         </div>
         <div className="specification-table__anchors">
           <span>
-            ↳ начало — #{table.start_anchor.index + 1} ({table.start_anchor.type})
+            ↳ начало — #{table.start_anchor.index} ({table.start_anchor.type})
           </span>
           <span>
-            ↳ конец — #{table.end_anchor.index + 1} ({table.end_anchor.type})
+            ↳ конец — #{table.end_anchor.index} ({table.end_anchor.type})
           </span>
         </div>
       </header>
@@ -96,7 +96,7 @@ export default function SpecificationPreview({ filename, specification }: Props)
           <p className="specification-preview__empty">В разделе не найдено таблиц.</p>
         ) : (
           specification.tables.map((table, idx) => (
-            <SpecificationTablePreview key={table.index} table={table} order={idx + 1} />
+            <SpecificationTablePreview key={table.index} table={table} order={idx} />
           ))
         )}
       </div>

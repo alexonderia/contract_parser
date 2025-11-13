@@ -7,7 +7,6 @@ import httpx
 
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434").rstrip("/")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:1.5b")
-# OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "phi3:3.8b")
 OLLAMA_TIMEOUT = float(os.getenv("OLLAMA_TIMEOUT", "600"))
 
 
@@ -32,6 +31,14 @@ class OllamaClient:
         }
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             response = await client.post(f"{self.base_url}/api/chat", json=payload)
+            response.raise_for_status()
+            return response.json()
+        
+    async def list_models(self) -> dict[str, Any]:
+        """Return the response from the `/api/tags` endpoint."""
+
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            response = await client.get(f"{self.base_url}/api/tags")
             response.raise_for_status()
             return response.json()
 
