@@ -52,96 +52,124 @@ def extract_specification(filename: str, content: bytes) -> SpecificationResult:
     return result
 
 def _locate_specification(blocks: list[Block]) -> SpecificationResult | None:
-    heading_index = _find_spec_heading(blocks)
-    if heading_index is None:
+    best_result: tuple[tuple[int, int], SpecificationResult] | None = None
+
+    for idx, block in enumerate(blocks):
+        if not _is_heading_candidate(block):
+            continue
+        collected = _collect_tables_after_heading(blocks, idx)
+        if collected is None:
+            continue
+
+        tables, end_index = collected
+        if not tables:
+            continue
+        heading_text = (block.text or "").strip() or "Спецификация"
+        priority = _heading_priority(heading_text)
+        key = (priority, idx)
+
+        result = SpecificationResult(
+            heading=heading_text,
+            start_index=idx,
+            end_index=end_index,
+            tables=tables,
+            start_block=block,
+            end_block=blocks[end_index],
+        )
+
+        if best_result is None or key < best_result[0]:
+            best_result = (key, result)
+
+    if best_result is None:
         return None
+    return best_result[1]
 
-    end_patterns = ["общая цена", "общая сумма"]
-    
-    first_table_index: int | None = None
-    last_table_index: int | None = None
-    collected_tables: list[TableRegion] = []
+def _heading_priority(text: str) -> int:
+    normalized = text.casefold()
+    if "спецификац" in normalized:
+        return 0
+    if "приложение" in normalized:
+        return 1
+    return 2
 
-    for idx in range(heading_index + 1, len(blocks)):
-        block = blocks[idx]
-        if block.type == "paragraph":
-            paragraph_text = (block.text or "").casefold()
-            if any(pattern in paragraph_text for pattern in end_patterns):
-                break
-            if not block.text:
-                continue
-            if last_table_index is not None and _looks_like_heading(block.text):
-                break
+def _is_heading_candidate(block: Block) -> bool:
+    if block.type != "paragraph":
+        return False
 
+    text = (block.text or "").casefold()
+    if not text.strip():
+        return False
 
-        if block.type == "table":
-            flat_text = " ".join(" ".join(row) for row in (block.rows or [])).lower()
-            keywords = ["наименован", "ед.", "кол", "цена", "сумм"]
-            if any(keyword in flat_text for keyword in keywords):
-                last_table_index = idx
-                if first_table_index is None:
-                    first_table_index = idx
-                collected_tables.append(
-                    TableRegion(
-                        index=idx,
-                        start_index=idx,
-                        end_index=idx,
-                        block=block,
-                    )
-                )
-                continue
-            if first_table_index is not None:
-                break
+    words = text.split()
+    if len(words) > 8 and "спецификац" in text:
+        return False
 
-    if first_table_index is None or last_table_index is None:
-        return None
-
-    heading_text = blocks[heading_index].text or "Спецификация" or "Спецификация №"
-    start_block = blocks[heading_index]
-    end_block = blocks[last_table_index]
-
-    return SpecificationResult(
-        heading=heading_text,
-        start_index=heading_index,
-        end_index=last_table_index,
-        tables=collected_tables,
-        start_block=start_block,
-        end_block=end_block,
-    )
-
-
-def _find_spec_heading(blocks: list[Block]) -> int | None:
     spec_patterns = [
         "пецификац",
         "пецификация №",
         "приложение №",
         "к договору",
-        # "приложение №1",
-        # "Номенклатура",
-        # "характеристика",
-        # "количество",
-        # "цена",
+        "номенклатура, характеристика",
     ]
-    candidates: list[int] = []
 
-    for idx, block in enumerate(blocks):
-        if block.type != "paragraph":
+    return any(pattern in text for pattern in spec_patterns)
+
+def _collect_tables_after_heading(
+    blocks: list[Block], index: int
+) -> tuple[list[TableRegion], int] | None:
+    end_patterns = ["общая цена", "общая сумма"]
+
+    tables: list[TableRegion] = []
+    last_relevant_index = index
+    found_tables = False
+
+    for cursor in range(index + 1, len(blocks)):
+        block = blocks[cursor]
+
+        if block.type == "paragraph":
+            text = (block.text or "").strip()
+            normalized = text.casefold()
+
+            if not text:
+                continue
+
+            if found_tables and any(pattern in normalized for pattern in end_patterns):
+                last_relevant_index = cursor
+                break
+
+            if found_tables and _looks_like_heading(text):
+                break
+
+            if not found_tables:
+                # Allow multi-line headings before the first table.
+                continue
+
+            last_relevant_index = cursor
             continue
-        text = (block.text or "").casefold()
 
-        if len(text.split()) > 8 and "спецификац" in text:
+        if block.type != "table":
+            continue
+        rows = block.rows or []
+        if not rows:
             continue
 
-        if any(pattern in text for pattern in spec_patterns):
-            for look_ahead in range(idx + 1, min(idx + 25, len(blocks))):
-                if blocks[look_ahead].type == "table":
-                    candidates.append(idx)
-                    break
-            
-    if not candidates:
+        if not is_specification_table(block):
+            if found_tables:
+                break
+            continue
+
+        tables.append(
+            TableRegion(index=cursor, start_index=cursor, end_index=cursor, block=block)
+        )
+        last_relevant_index = cursor
+        found_tables = True
+
+    if not tables:
         return None
-    return candidates[-1]
+    if last_relevant_index < tables[-1].end_index:
+        last_relevant_index = tables[-1].end_index
 
+    return tables, last_relevant_index
 
 def _looks_like_heading(text: str) -> bool:
     normalized = text.strip()

@@ -83,6 +83,7 @@ def _parse_docx(payload: bytes) -> list[Block]:
             rows = _table_to_rows(item)
             if rows:
                 blocks.append(Block(type="table", text="", rows=rows))
+    print(blocks)
     return blocks
 
 
