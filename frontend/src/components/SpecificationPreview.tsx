@@ -78,14 +78,49 @@ function SpecificationTablePreview({ table, order }: TableProps) {
 interface Props {
   filename: string;
   specification: SpecificationResponse;
+  exportedDocxName?: string | null;
+  exportedDocxBase64?: string | null;
 }
 
-export default function SpecificationPreview({ filename, specification }: Props) {
+function downloadBase64File(base64: string, filename: string) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  const blob = new Blob([bytes], {
+    type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+export default function SpecificationPreview({
+  filename,
+  specification,
+  exportedDocxName,
+  exportedDocxBase64,
+}: Props) {
   return (
     <div className="specification-preview">
       <div className="specification-preview__header">
         <p className="specification-preview__document">📎 Документ «{filename}»</p>
         <p className="specification-preview__heading">Заголовок: {specification.heading}</p>
+        {exportedDocxBase64 && exportedDocxName ? (
+          <button
+            type="button"
+            className="button specification-preview__download"
+            onClick={() => downloadBase64File(exportedDocxBase64, exportedDocxName)}
+          >
+            Скачать спецификацию (DOCX)
+          </button>
+        ) : null}
       </div>
       <div className="specification-preview__anchors">
         <AnchorPreview title="Начало" anchor={specification.start_anchor} />

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import logging
 
 import httpx
@@ -19,6 +20,7 @@ from .schemas import (
     SpecificationExtractionResponse,
 )
 from .specification_builder import build_specification_response
+from .specification_exporter import export_specification_to_docx
 
 logger = logging.getLogger("contract_parser.backend")
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
@@ -115,7 +117,23 @@ async def _extract_ai_specification(file: UploadFile) -> SpecificationExtraction
         logger.exception("Failed to process document '%s' via neural service", file.filename)
         raise HTTPException(status_code=400, detail="Не удалось обработать документ") from exc
     _perform_debug_logging(debug)
-    return SpecificationExtractionResponse(specification=specification, debug=debug)
+    export_payload = export_specification_to_docx(
+        specification,
+        source_filename=file.filename,
+    )
+    exported_name = None
+    exported_base64 = None
+    if export_payload:
+        path, data = export_payload
+        exported_name = path.name
+        exported_base64 = base64.b64encode(data).decode("ascii")
+
+    return SpecificationExtractionResponse(
+        specification=specification,
+        debug=debug,
+        exported_docx_name=exported_name,
+        exported_docx_base64=exported_base64,
+    )
 
 
 async def _extract_internal_specification(file: UploadFile) -> SpecificationExtractionResponse:
@@ -130,7 +148,23 @@ async def _extract_internal_specification(file: UploadFile) -> SpecificationExtr
         logger.exception("Failed to parse document '%s'", file.filename)
         raise HTTPException(status_code=400, detail="Не удалось обработать документ") from exc
     specification = build_specification_response(result)
-    return SpecificationExtractionResponse(specification=specification, debug=None)
+    export_payload = export_specification_to_docx(
+        specification,
+        source_filename=file.filename,
+    )
+    exported_name = None
+    exported_base64 = None
+    if export_payload:
+        path, data = export_payload
+        exported_name = path.name
+        exported_base64 = base64.b64encode(data).decode("ascii")
+
+    return SpecificationExtractionResponse(
+        specification=specification,
+        debug=None,
+        exported_docx_name=exported_name,
+        exported_docx_base64=exported_base64,
+    )
 
 
 @app.post("/api/specification/ai", response_model=SpecificationExtractionResponse)

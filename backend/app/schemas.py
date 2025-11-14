@@ -80,6 +80,14 @@ class SpecificationExtractionResponse(BaseModel):
         default=None,
         description="Диагностика, если документ обрабатывался через ИИ",
     )
+    exported_docx_name: str | None = Field(
+        default=None,
+        description="Имя DOCX-файла, содержащего только таблицы спецификации",
+    )
+    exported_docx_base64: str | None = Field(
+        default=None,
+        description="Содержимое DOCX-файла в кодировке base64",
+    )
 
 
 class CroppedSpecResponse(BaseModel):

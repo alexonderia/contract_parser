@@ -35,6 +35,8 @@ export interface SpecificationResponse {
 export interface SpecificationExtractionResponse {
   specification: SpecificationResponse;
   debug?: LlmDebugInfo | null;
+  exported_docx_name?: string | null;
+  exported_docx_base64?: string | null;
 }
 
 export interface SpecificationFileResponse {

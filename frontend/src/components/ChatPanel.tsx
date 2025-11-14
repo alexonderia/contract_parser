@@ -34,6 +34,8 @@ type SpecificationChatMessage = BaseChatMessage & {
   kind: "specification";
   filename: string;
   specification: SpecificationResponse;  
+  exportedDocxName?: string | null;
+  exportedDocxBase64?: string | null;
 };
 
 type ChatMessage = TextChatMessage | SpecificationChatMessage;
@@ -79,18 +81,10 @@ function DebugDetails({ debug }: { debug?: LlmDebugInfo | null }) {
           <h4>Промпт (JSON)</h4>
           <pre>{JSON.stringify(debug.prompt, null, 2)}</pre>
         </section>
-        {/* <section>
-          <h4>Промпт (форматированный)</h4>
-          <pre>{debug.prompt_formatted}</pre>
-        </section> */}
         <section>
           <h4>Ответ (JSON)</h4>
           <pre>{JSON.stringify(debug.response, null, 2)}</pre>
         </section>
-        {/* <section>
-          <h4>Ответ (форматированный)</h4>
-          <pre>{debug.response_formatted}</pre>
-        </section> */}
       </div>
     </details>
   );
@@ -203,6 +197,8 @@ function ChatPanel() {
           filename: file.name,
           specification: result.specification,
           debug: result.debug,
+          exportedDocxName: result.exported_docx_name,
+          exportedDocxBase64: result.exported_docx_base64,
         },
       ]);
 
@@ -238,6 +234,8 @@ function ChatPanel() {
                 <SpecificationPreview
                   filename={message.filename}
                   specification={message.specification}
+                  exportedDocxName={message.exportedDocxName}
+                  exportedDocxBase64={message.exportedDocxBase64}
                 />
                 <DebugDetails debug={message.debug} />
               </div>

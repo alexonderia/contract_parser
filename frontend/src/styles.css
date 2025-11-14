@@ -262,6 +262,10 @@ body {
   gap: 0.2rem;
 }
 
+.specification-preview__download {
+  align-self: flex-start;
+}
+
 .specification-preview__document,
 .specification-preview__heading {
   margin: 0;
