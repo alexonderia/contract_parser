@@ -31,7 +31,7 @@ function SpecificationTablePreview({ table, order }: TableProps) {
     <div className="specification-table">
       <header className="specification-table__header">
         <div className="specification-table__title">
-          Таблица {order} · #{table.index}
+          Таблица {order + 1} · #{table.index}
         </div>
         <div className="specification-table__meta">
           {table.row_count} строк · {table.column_count} столбцов

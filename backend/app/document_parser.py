@@ -7,6 +7,7 @@ from typing import Literal
 
 from .document_models import Block
 from .document_processing import load_blocks
+from .specification_utils import is_specification_table
 
 BlockType = Literal["paragraph", "table"]
 
@@ -38,7 +39,7 @@ class UnsupportedDocumentError(RuntimeError):
 
 
 def extract_specification(filename: str, content: bytes) -> SpecificationResult:
-    """Определtнные якори для блока "Спецификация". """
+    """Определенные якори для блока "Спецификация". """
 
     suffix = Path(filename or "").suffix.lower()
     if suffix not in {".docx", ".txt", ".md"}:
@@ -55,7 +56,7 @@ def _locate_specification(blocks: list[Block]) -> SpecificationResult | None:
     if heading_index is None:
         return None
 
-    end_patterns = ["Общая цена", "Общая сумма"]
+    end_patterns = ["общая цена", "общая сумма"]
     
     first_table_index: int | None = None
     last_table_index: int | None = None
@@ -71,6 +72,7 @@ def _locate_specification(blocks: list[Block]) -> SpecificationResult | None:
                 continue
             if last_table_index is not None and _looks_like_heading(block.text):
                 break
+
 
         if block.type == "table":
             flat_text = " ".join(" ".join(row) for row in (block.rows or [])).lower()
@@ -109,7 +111,17 @@ def _locate_specification(blocks: list[Block]) -> SpecificationResult | None:
 
 
 def _find_spec_heading(blocks: list[Block]) -> int | None:
-    spec_patterns = ["спецификац", "спецификация №", "приложение №", "приложение к договору"]
+    spec_patterns = [
+        "пецификац",
+        "пецификация №",
+        "приложение №",
+        "к договору",
+        # "приложение №1",
+        # "Номенклатура",
+        # "характеристика",
+        # "количество",
+        # "цена",
+    ]
     candidates: list[int] = []
 
     for idx, block in enumerate(blocks):
@@ -117,14 +129,15 @@ def _find_spec_heading(blocks: list[Block]) -> int | None:
             continue
         text = (block.text or "").casefold()
 
-        if len(text.split()) > 20 and "спецификация" in text:
+        if len(text.split()) > 8 and "спецификац" in text:
             continue
 
-        if any(pattern in text for pattern in spec_patterns ):
-            for look_ahead in range(idx + 1, min(idx + 10, len(blocks))):
+        if any(pattern in text for pattern in spec_patterns):
+            for look_ahead in range(idx + 1, min(idx + 25, len(blocks))):
                 if blocks[look_ahead].type == "table":
                     candidates.append(idx)
                     break
+            
     if not candidates:
         return None
     return candidates[-1]

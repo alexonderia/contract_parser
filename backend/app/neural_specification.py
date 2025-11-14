@@ -16,6 +16,7 @@ from .document_processing import (
 from .llm_utils import build_debug_info, extract_reply
 from .ollama import client
 from .schemas import LlmDebugInfo, SpecificationAnchor, SpecificationResponse, SpecificationTable
+from .specification_utils import is_specification_table, table_has_goods
 
 logger = logging.getLogger("contract_parser.backend.neural_spec")
 
@@ -25,7 +26,7 @@ _USER_PROMPT_TEMPLATE = Template("""
 Ты анализируешь документ и должен найти раздел "СПЕЦИФИКАЦИЯ".
 Этот раздел обычно начинается строкой, где встречается слово "СПЕЦИФИКАЦИЯ",
 и включает в себя одну или несколько таблиц ("TABLE:") и сопровождающий текст.
-Заканчивается раздел строкой, где встречается фраза "Общая цена".
+Заканчивается раздел строкой, где встречается фраза "Общая цена" или "Общая сумма".
 Документ передаётся в виде пронумерованных строк.
 Найди диапазон строк, где начинается и заканчивается спецификация.
 Строки таблиц начинаются с "TABLE:".
@@ -39,7 +40,7 @@ _USER_PROMPT_TEMPLATE = Template("""
   "end": {"line": <номер строки>, "preview": "короткое описание конца"},
   "tables": [
     {
-      "index": <номер таблицы>,
+      "index": <номер таблицы от 0>,
       "row_count": <число строк>,
       "column_count": <число столбцов>,
       "preview": "первые слова таблицы",
@@ -133,6 +134,9 @@ def _find_tables_in_section(
 
         rows = block.rows or []
         if not rows:
+            continue
+
+        if not is_specification_table(block):
             continue
 
         line_positions = block_line_positions.get(block_index) or []
@@ -230,6 +234,8 @@ async def detect_specification(filename: str, payload: bytes) -> tuple[Specifica
             )
         except Exception:  # pragma: no cover - robust parsing
             continue
+
+    tables = [table for table in tables if table.rows and table_has_goods(table.rows)]
 
     specification = SpecificationResponse(
         heading=data.get("heading") or "СПЕЦИФИКАЦИЯ",
