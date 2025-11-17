@@ -20,7 +20,7 @@ from .schemas import (
     SpecificationExtractionResponse,
 )
 from .specification_builder import build_specification_response
-from .specification_exporter import export_specification_to_docx
+from .specification_exporter import export_specification_to_json
 
 logger = logging.getLogger("contract_parser.backend")
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
@@ -117,7 +117,7 @@ async def _extract_ai_specification(file: UploadFile) -> SpecificationExtraction
         logger.exception("Failed to process document '%s' via neural service", file.filename)
         raise HTTPException(status_code=400, detail="Не удалось обработать документ") from exc
     _perform_debug_logging(debug)
-    export_payload = export_specification_to_docx(
+    export_payload = export_specification_to_json(
         specification,
         source_filename=file.filename,
     )
@@ -131,8 +131,8 @@ async def _extract_ai_specification(file: UploadFile) -> SpecificationExtraction
     return SpecificationExtractionResponse(
         specification=specification,
         debug=debug,
-        exported_docx_name=exported_name,
-        exported_docx_base64=exported_base64,
+        exported_json_name=exported_name,
+        exported_json_base64=exported_base64,
     )
 
 
@@ -148,7 +148,7 @@ async def _extract_internal_specification(file: UploadFile) -> SpecificationExtr
         logger.exception("Failed to parse document '%s'", file.filename)
         raise HTTPException(status_code=400, detail="Не удалось обработать документ") from exc
     specification = build_specification_response(result)
-    export_payload = export_specification_to_docx(
+    export_payload = export_specification_to_json(
         specification,
         source_filename=file.filename,
     )
@@ -162,8 +162,8 @@ async def _extract_internal_specification(file: UploadFile) -> SpecificationExtr
     return SpecificationExtractionResponse(
         specification=specification,
         debug=None,
-        exported_docx_name=exported_name,
-        exported_docx_base64=exported_base64,
+        exported_json_name=exported_name,
+        exported_json_base64=exported_base64,
     )
 
 

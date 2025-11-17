@@ -33,9 +33,9 @@ type TextChatMessage = BaseChatMessage & {
 type SpecificationChatMessage = BaseChatMessage & {
   kind: "specification";
   filename: string;
-  specification: SpecificationResponse;  
-  exportedDocxName?: string | null;
-  exportedDocxBase64?: string | null;
+  specification: SpecificationResponse;
+  exportedJsonName?: string | null;
+  exportedJsonBase64?: string | null;
 };
 
 type ChatMessage = TextChatMessage | SpecificationChatMessage;
@@ -197,8 +197,8 @@ function ChatPanel() {
           filename: file.name,
           specification: result.specification,
           debug: result.debug,
-          exportedDocxName: result.exported_docx_name,
-          exportedDocxBase64: result.exported_docx_base64,
+          exportedJsonName: result.exported_json_name,
+          exportedJsonBase64: result.exported_json_base64,
         },
       ]);
 
@@ -234,8 +234,8 @@ function ChatPanel() {
                 <SpecificationPreview
                   filename={message.filename}
                   specification={message.specification}
-                  exportedDocxName={message.exportedDocxName}
-                  exportedDocxBase64={message.exportedDocxBase64}
+                  exportedJsonName={message.exportedJsonName}
+                  exportedJsonBase64={message.exportedJsonBase64}
                 />
                 <DebugDetails debug={message.debug} />
               </div>

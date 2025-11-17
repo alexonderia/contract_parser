@@ -78,8 +78,8 @@ function SpecificationTablePreview({ table, order }: TableProps) {
 interface Props {
   filename: string;
   specification: SpecificationResponse;
-  exportedDocxName?: string | null;
-  exportedDocxBase64?: string | null;
+  exportedJsonName?: string | null;
+  exportedJsonBase64?: string | null;
 }
 
 function downloadBase64File(base64: string, filename: string) {
@@ -89,7 +89,7 @@ function downloadBase64File(base64: string, filename: string) {
     bytes[index] = binary.charCodeAt(index);
   }
   const blob = new Blob([bytes], {
-    type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    type: "application/json",
   });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -104,21 +104,21 @@ function downloadBase64File(base64: string, filename: string) {
 export default function SpecificationPreview({
   filename,
   specification,
-  exportedDocxName,
-  exportedDocxBase64,
+  exportedJsonName,
+  exportedJsonBase64,
 }: Props) {
   return (
     <div className="specification-preview">
       <div className="specification-preview__header">
         <p className="specification-preview__document">📎 Документ «{filename}»</p>
         <p className="specification-preview__heading">Заголовок: {specification.heading}</p>
-        {exportedDocxBase64 && exportedDocxName ? (
+        {exportedJsonBase64 && exportedJsonName ? (
           <button
             type="button"
             className="button specification-preview__download"
-            onClick={() => downloadBase64File(exportedDocxBase64, exportedDocxName)}
+            onClick={() => downloadBase64File(exportedJsonBase64, exportedJsonName)}
           >
-            Скачать спецификацию (DOCX)
+            Скачать спецификацию (JSON)
           </button>
         ) : null}
       </div>
