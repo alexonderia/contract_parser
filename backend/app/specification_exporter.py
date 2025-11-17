@@ -180,18 +180,25 @@ def _count_itogo_rows(rows: list[list[str]]) -> int:
             count += 1
     return count
 
-def _extract_items(table: SpecificationTable) -> tuple[list[dict[str, object]], float | None, int | None]:
+def _extract_items(table: SpecificationTable) -> tuple[list[dict[str, object]], float | None, int | None, str | None]:
     rows = table.rows or []
+    warning: str | None = None 
+
     if not rows:
-        return [], None, None
+        return [], None, None, warning
 
     body, summary = _split_body_and_summary(rows)
     if not body:
-        return [], _extract_total(summary), _extract_vat_percent(summary)
+        total = _extract_total(summary)
+        vat_percent = _extract_vat_percent(summary)
+        if vat_percent is None:
+            vat_percent = _find_vat_percent_anywhere(rows)
+        return [], total, vat_percent, warning
 
     header, *data_rows = body
     columns = _infer_columns(header)
     items: list[dict[str, object]] = []
+    calculared_total = 0.0
 
     for row in data_rows:
         if _is_merged_row(row):
@@ -226,7 +233,9 @@ def _extract_items(table: SpecificationTable) -> tuple[list[dict[str, object]], 
         amount_index = columns.get("amount")
         if amount_index is not None and amount_index < len(row):
             amount_value = _normalize_number(_parse_decimal(row[amount_index]))
+            
             if amount_value is not None:
+                calculared_total += float(amount_value)
                 item["amount"] = amount_value
 
         country_index = columns.get("country")
@@ -249,9 +258,12 @@ def _extract_items(table: SpecificationTable) -> tuple[list[dict[str, object]], 
         vat_percent = _find_vat_percent_anywhere(rows)
 
     if _count_itogo_rows(rows) > 1:
-        total = None
-        vat_percent = None
-    return items, total, vat_percent
+        total = calculared_total
+
+    if total is not None and abs(float(total) - calculared_total) > 0.01:
+        warning = "Ошибка в вычислении итоговой суммы!"
+
+    return items, total, vat_percent, warning
 
 
 def _pick_filename(source_name: str | None, stem_fallback: str) -> str:
@@ -289,14 +301,17 @@ def export_specification_to_json(
     all_items: list[dict[str, object]] = []
     total_values: list[float] = []
     vat_values: list[int] = []
+    warnings: list[str] = []
 
     for table in specification.tables:
-        items, total, vat_percent = _extract_items(table)
+        items, total, vat_percent, warning = _extract_items(table)
         all_items.extend(items)
         if total is not None:
             total_values.append(total)
         if vat_percent is not None:
             vat_values.append(vat_percent)
+        if warning is not None:
+            warnings.append(warning)
 
     if not all_items and not total_values and not vat_values:
         return None    
@@ -305,6 +320,7 @@ def export_specification_to_json(
         "items": all_items,
         "total": None if not total_values else _normalize_number(sum(total_values)),
         "vat": None if not vat_values else vat_values[0],
+        "warning": None if not warnings else warnings[0],
     }
 
     data = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
