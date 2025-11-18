@@ -46,6 +46,13 @@ def extract_specification(filename: str, content: bytes) -> SpecificationResult:
         raise UnsupportedDocumentError("Поддерживаются только файлы DOCX и TXT")
 
     blocks = load_blocks(filename, content)
+
+    return extract_specification_from_blocks(blocks)
+
+
+def extract_specification_from_blocks(blocks: list[Block]) -> SpecificationResult:
+    """Locate specification data inside pre-loaded document blocks."""
+
     result = _locate_specification(blocks)
     if result is None:
         raise ValueError("В документе не найден раздел 'Спецификация' с таблицами")
@@ -193,4 +200,5 @@ __all__ = [
     "TableRegion",
     "UnsupportedDocumentError",
     "extract_specification",
+    "extract_specification_from_blocks",
 ]

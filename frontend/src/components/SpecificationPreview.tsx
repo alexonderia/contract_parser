@@ -2,6 +2,7 @@ import type {
   SpecificationAnchor,
   SpecificationResponse,
   SpecificationTable,
+  DocumentSection,
 } from "../api/specification";
 
 interface AnchorProps {
@@ -80,6 +81,7 @@ interface Props {
   specification: SpecificationResponse;
   exportedJsonName?: string | null;
   exportedJsonBase64?: string | null;
+  sections?: DocumentSection[];
 }
 
 function downloadBase64File(base64: string, filename: string) {
@@ -106,6 +108,7 @@ export default function SpecificationPreview({
   specification,
   exportedJsonName,
   exportedJsonBase64,
+  sections,
 }: Props) {
   return (
     <div className="specification-preview">
@@ -122,6 +125,23 @@ export default function SpecificationPreview({
           </button>
         ) : null}
       </div>
+      {sections && sections.length > 0 ? (
+        <div className="specification-preview__sections">
+          <h4 className="specification-preview__sections-title">Разделы документа</h4>
+          <ul className="specification-preview__section-list">
+            {sections.map((section) => (
+              <li key={`${section.filename}-${section.number ?? "header"}`}>
+                <div className="specification-preview__section-title">
+                  {section.number !== null ? `${section.number}. ` : "Шапка: "}
+                  {section.title}
+                  <span className="specification-preview__section-filename"> · {section.filename}</span>
+                </div>
+                <p className="specification-preview__section-content">{section.content || "(раздел пуст)"}</p>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       <div className="specification-preview__anchors">
         <AnchorPreview title="Начало" anchor={specification.start_anchor} />
         <AnchorPreview title="Конец" anchor={specification.end_anchor} />

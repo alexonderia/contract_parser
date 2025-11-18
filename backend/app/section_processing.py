@@ -1,0 +1,135 @@
+"""Utilities for slicing documents into numbered contract sections."""
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass
+from pathlib import Path
+
+from .document_models import Block
+from .document_processing import blocks_to_prompt_lines_with_mapping
+
+_SECTION_HEADING_RE = re.compile(r"^(?P<number>\d{1,2})\.\s(?P<title>.+)")
+_SECTION_BREAK_RE = re.compile(r"Приложение № 1")
+
+@dataclass(slots=True)
+class SectionChunk:
+    """Extracted section text with optional numbering."""
+
+    number: int | None
+    title: str
+    content: str
+
+
+def split_into_sections(
+    blocks: list[Block],
+    *,
+    max_section_number: int = 15,
+) -> list[SectionChunk]:
+    """Split document blocks into numbered sections and a header.
+
+    Parameters
+    ----------
+    blocks:
+        Parsed document blocks preserving original order.
+    stop_before_index:
+        Optional block index where section parsing should stop (useful to skip
+        specification appendices).
+    max_section_number:
+        Upper bound for recognized section numbers. Content after that is ignored.
+    """
+
+    lines, mapping = blocks_to_prompt_lines_with_mapping(blocks)
+
+    sections: list[SectionChunk] = []
+    current_lines: list[str] = []
+    current_number: int | None = None
+    current_title = "Шапка"
+    header_saved = False
+
+    def flush_section() -> None:
+        nonlocal current_lines, current_number, current_title, header_saved
+        content = "\n".join(line for line in current_lines if line).strip()
+        if content or (current_number is None and not header_saved):
+            sections.append(
+                SectionChunk(number=current_number, title=current_title, content=content)
+            )
+            if current_number is None:
+                header_saved = True
+        current_lines = []
+
+    for line, (block_index, _) in zip(lines, mapping):
+        
+        if _SECTION_BREAK_RE.match(line):
+            flush_section()
+            break
+
+        heading_match = _SECTION_HEADING_RE.match(line)
+        if heading_match:
+            number = int(heading_match.group("number"))
+            
+
+            flush_section()
+            current_number = number
+            raw_title = heading_match.group("title")
+            current_title = raw_title.strip() or f"Раздел {number}"
+            current_lines = [line]
+            continue
+
+        current_lines.append(line)
+
+    flush_section()
+    return sections
+
+
+def _sanitize(value: str) -> str:
+    sanitized = re.sub(r"[^0-9A-Za-zА-Яа-я_-]+", "_", value).strip("._")
+    return sanitized or "section"
+
+
+def _next_available_path(directory: Path, filename: str) -> Path:
+    candidate = directory / filename
+    if not candidate.exists():
+        return candidate
+
+    stem = candidate.stem
+    suffix = candidate.suffix
+    counter = 1
+    while True:
+        updated = directory / f"{stem}_{counter}{suffix}"
+        if not updated.exists():
+            return updated
+        counter += 1
+
+
+def export_sections_to_txt(
+    sections: list[SectionChunk],
+    *,
+    source_filename: str | None = None,
+    export_dir: Path | None = None,
+) -> list[tuple[SectionChunk, Path]]:
+    """Persist each section into a standalone UTF-8 encoded text file."""
+
+    if not sections:
+        return []
+
+    base_directory = Path(export_dir or Path(__file__).resolve().parent / "exports")
+    base_directory.mkdir(parents=True, exist_ok=True)
+
+    stem = Path(source_filename or "document").stem or "document"
+    sanitized_stem = _sanitize(stem)
+
+    exported: list[tuple[SectionChunk, Path]] = []
+    for section in sections:
+        suffix = "header" if section.number is None else f"section_{section.number:02d}"
+        title_part = _sanitize(section.title)[:50]
+        filename = f"{sanitized_stem}_{suffix}"
+        if title_part:
+            filename += f"_{title_part}"
+        target = _next_available_path(base_directory, f"{filename}.txt")
+        target.write_text(section.content, encoding="utf-8")
+        exported.append((section, target))
+
+    return exported
+
+
+__all__ = ["SectionChunk", "split_into_sections", "export_sections_to_txt"]
