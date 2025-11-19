@@ -50,35 +50,27 @@ export async function sendSimpleChatMessage(
   message: string,
   options?: SimpleChatOptions,
 ): Promise<ChatReply> {
-  const trimmedPrompt = options?.systemPrompt?.trim();
+
+  const trimmedPrompt = options?.systemPrompt?.trim() || "";
   const file = options?.file ?? null;
 
-  if (file) {
-    const formData = new FormData();
-    formData.append("message", message);
-    if (trimmedPrompt) {
-      formData.append("system_prompt", trimmedPrompt);
-    }
-    formData.append("file", file);
+  const formData = new FormData();
 
-    const response = await fetch(resolveApiUrl("/api/chat/simple"), {
-      method: "POST",
-      body: formData,
-    });
+  // backend всегда ждёт message_form
+  formData.append("message_form", message);
 
-    return handleResponse(response);
+  if (trimmedPrompt.length > 0) {
+    formData.append("system_prompt_form", trimmedPrompt);
   }
-  const payload: { message: string; system_prompt?: string } = { message };
-  if (trimmedPrompt) {
-    payload.system_prompt = trimmedPrompt;
+
+  // файл необязателен
+  if (file) {
+    formData.append("file", file);
   }
 
   const response = await fetch(resolveApiUrl("/api/chat/simple"), {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
+    body: formData,
   });
 
   return handleResponse(response);

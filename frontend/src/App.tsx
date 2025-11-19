@@ -1,6 +1,9 @@
-import ChatPanel from "./components/ChatPanel";
+import { useState } from "react";
+import SimpleChatPanel from "./components/SimpleChatPanel";
+import SpecificationPanel from "./components/SpecificationPanel";
 
 function App() {
+  const [activeView, setActiveView] = useState<"chat" | "specification">("chat");
   return (
     <div className="app-container">
       <header className="app-header">
@@ -11,8 +14,24 @@ function App() {
           получить структурированную спецификацию.
         </p>
       </header>
+      <nav className="app-nav">
+        <button
+          type="button"
+          className={`app-nav__button${activeView === "chat" ? " app-nav__button--active" : ""}`}
+          onClick={() => setActiveView("chat")}
+        >
+          Простой чат
+        </button>
+        <button
+          type="button"
+          className={`app-nav__button${activeView === "specification" ? " app-nav__button--active" : ""}`}
+          onClick={() => setActiveView("specification")}
+        >
+          Спецификация
+        </button>
+      </nav>
       <main className="app-main">
-        <ChatPanel />
+        {activeView === "chat" ? <SimpleChatPanel /> : <SpecificationPanel />}
       </main>
     </div>
   );

@@ -31,6 +31,38 @@ body {
   gap: 0.6rem;
 }
 
+.app-nav {
+  display: inline-flex;
+  gap: 0.75rem;
+  margin-bottom: 1.75rem;
+  background: rgba(248, 250, 252, 0.65);
+  padding: 0.45rem;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+}
+
+.app-nav__button {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 600;
+  padding: 0.6rem 1.4rem;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.app-nav__button:hover {
+  color: #0f172a;
+}
+
+.app-nav__button--active {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(192, 132, 252, 0.15));
+  color: #0f172a;
+  box-shadow: 0 10px 20px rgba(99, 102, 241, 0.15);
+}
+
 .app-badge {
   display: inline-flex;
   align-items: center;
@@ -80,6 +112,28 @@ body {
   border: 1px solid var(--panel-border);
   background: var(--panel-bg);
   box-shadow: var(--shadow);
+}
+
+.specification-panel__results {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.specification-panel__placeholder {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--muted);
+}
+
+.specification-panel__result {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  border-radius: 0.9rem;
+  border: 1px solid var(--panel-border);
+  background: #f8fafc;
 }
 
 .panel h2 {

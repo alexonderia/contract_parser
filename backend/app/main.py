@@ -82,33 +82,68 @@ async def simple_chat(
     system_prompt_form: str | None = Form(default=None),
     file: UploadFile | None = File(default=None),
 ) -> ChatResponse:
-    message: str | None = None
-    system_prompt: str | None = None
-    content_type = request.headers.get("content-type", "").lower()
+    """
+    Обработчик простого чата.
+    Поддерживает:
+      - только текстовое сообщение
+      - текст + прикреплённый файл (txt/md/docx)
+    """
 
-    expects_json = content_type.startswith("application/json") and not any(
-        item is not None for item in (message_form, system_prompt_form, file)
-    )
-
-    if expects_json:
-        try:
-            payload = await request.json()
-        except ValueError as exc:  # pragma: no cover - defensive guardrail
-            raise HTTPException(status_code=400, detail="Некорректный JSON-запрос") from exc
-        data = SimpleChatRequest(**payload)
-        message = data.message
-        system_prompt = data.system_prompt
-    else:
-        message = message_form
-        system_prompt = system_prompt_form
-
-    if not message or not message.strip():
+    # 1. Проверяем, что сообщение есть
+    if not message_form or not message_form.strip():
         raise HTTPException(status_code=422, detail="Сообщение не должно быть пустым")
+
+    message = message_form.strip()
+    system_prompt = system_prompt_form.strip() if system_prompt_form else None
+
+    # 2. Формируем итоговый массив сообщений
     messages: list[dict[str, str]] = []
-    if system_prompt and system_prompt.strip():
-        messages.append({"role": "system", "content": system_prompt.strip()})
+
+    # Системный промпт, если был указан
+    if system_prompt:
+        messages.append({
+            "role": "system",
+            "content": system_prompt
+        })
+
+    # 3. Если файл был прикреплён — читаем содержимое
+    if file is not None:
+        try:
+            content_bytes = await file.read()
+            text_content = ""
+
+            # Попытка прочитать как UTF-8
+            try:
+                text_content = content_bytes.decode("utf-8", errors="ignore")
+            except Exception:
+                text_content = ""
+
+            # Если docx — парсим через python-docx
+            if file.filename.lower().endswith(".docx"):
+                try:
+                    from docx import Document
+                    import io
+                    doc = Document(io.BytesIO(content_bytes))
+                    text_content = "\n".join(p.text for p in doc.paragraphs)
+                except Exception:
+                    pass
+
+            if text_content.strip():
+                messages.append({
+                    "role": "user",
+                    "content": (
+                        f"Содержимое прикреплённого документа «{file.filename}»:\n\n"
+                        f"{text_content}"
+                    )
+                })
+
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Ошибка чтения файла: {e}")
+
+    # 4. Основное сообщение пользователя
     messages.append({"role": "user", "content": message})
 
+    # 5. Вызываем модель
     return await _perform_chat(messages)
 
 
