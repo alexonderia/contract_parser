@@ -7,7 +7,8 @@ function App() {
         <h1>Contract Parser</h1>
         <p>
           Эта демо-страница отправляет ваши вопросы на Ollama, где запущена модель
-          <code> qwen2.5:1.5b</code>.
+          <code> qwen2.5:1.5b</code>. Задайте вопрос или загрузите документ, чтобы
+          получить структурированную спецификацию.
         </p>
       </header>
       <main className="app-main">

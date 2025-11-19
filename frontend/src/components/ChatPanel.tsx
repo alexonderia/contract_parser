@@ -1,7 +1,6 @@
 import {
   type ChangeEvent,
   type KeyboardEventHandler,
-  useMemo,
   useState,
 } from "react";
 import {
@@ -104,7 +103,7 @@ function DebugDetails({ debug }: { debug?: LlmDebugInfo | null }) {
 }
 
 function useChatState(initialMessages: ChatMessage[]) {
-  const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
+  const [messages, setMessages] = useState<ChatMessage[]>(() => initialMessages);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -166,9 +165,35 @@ function useChatState(initialMessages: ChatMessage[]) {
   } as const;
 }
 
+function ChatMessageItem({ message }: { message: ChatMessage }) {
+  const authorLabel = message.role === "user" ? "Вы" : "Модель";
+
+  return (
+    <div className={`chat-message chat-message--${message.role}`}>
+      <strong>{authorLabel}</strong>
+      {message.kind === "specification" ? (
+        <div className="chat-message__specification">
+          <p className="chat-message__summary">{message.content}</p>
+          <SpecificationPreview
+            filename={message.filename}
+            specification={message.specification}
+            exportedJsonName={message.exportedJsonName}
+            exportedJsonBase64={message.exportedJsonBase64}
+          />
+          <DebugDetails debug={message.debug} />
+        </div>
+      ) : (
+        <div>
+          <p>{message.content}</p>
+          <DebugDetails debug={message.debug} />
+        </div>
+      )}
+    </div>
+  );
+}
 
 function ChatPanel() {
-  const initial = useMemo(() => [welcomeMessage], []);
+  
   const {
     messages,
     input,
@@ -180,7 +205,7 @@ function ChatPanel() {
     setMessages,
     setError,
     setIsLoading,
-  } = useChatState(initial);
+  } = useChatState([welcomeMessage]);
   const [specMode, setSpecMode] = useState<SpecificationMode>("ai");
 
   const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {

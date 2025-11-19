@@ -1,9 +1,9 @@
-"""Utility helpers for reading documents into normalized blocks or lines."""
+"""Utility helpers for extracting normalized blocks from documents."""
 from __future__ import annotations
 
 from io import BytesIO
 from pathlib import Path
-from typing import Iterable
+from typing import Callable, Iterable
 import re
 
 from docx import Document
@@ -14,6 +14,8 @@ from docx.table import Table
 from docx.text.paragraph import Paragraph
 
 from .document_models import Block
+
+Parser = Callable[[bytes], list[Block]]
 
 def _append_line(
     lines: list[str],
@@ -83,7 +85,6 @@ def _parse_docx(payload: bytes) -> list[Block]:
             rows = _table_to_rows(item)
             if rows:
                 blocks.append(Block(type="table", text="", rows=rows))
-    print(blocks)
     return blocks
 
 
@@ -122,12 +123,14 @@ def load_blocks(filename: str, payload: bytes) -> list[Block]:
     """Load document blocks for the provided filename and payload."""
 
     suffix = Path(filename or "").suffix.lower()
-    if suffix == ".docx":
-        return _parse_docx(payload)
-    if suffix in {".txt", ".md"}:
-        return _parse_plain_text(payload)
-    # Fallback: treat as text to provide at least some result for debugging
-    return _parse_plain_text(payload)
+    parsers: dict[str, Parser] = {
+        ".docx": _parse_docx,
+        ".txt": _parse_plain_text,
+        ".md": _parse_plain_text,
+    }
+
+    parser = parsers.get(suffix, _parse_plain_text)
+    return parser(payload)
 
 def blocks_to_prompt_lines_with_mapping(
     blocks: list[Block],
