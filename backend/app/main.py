@@ -4,7 +4,7 @@ import base64
 import logging
 
 import httpx
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
 from .document_parser import (
@@ -76,11 +76,38 @@ async def chat(request: ChatRequest) -> ChatResponse:
 
 
 @app.post("/api/chat/simple", response_model=ChatResponse)
-async def simple_chat(request: SimpleChatRequest) -> ChatResponse:
+async def simple_chat(
+    request: Request,
+    message_form: str | None = Form(default=None),
+    system_prompt_form: str | None = Form(default=None),
+    file: UploadFile | None = File(default=None),
+) -> ChatResponse:
+    message: str | None = None
+    system_prompt: str | None = None
+    content_type = request.headers.get("content-type", "").lower()
+
+    expects_json = content_type.startswith("application/json") and not any(
+        item is not None for item in (message_form, system_prompt_form, file)
+    )
+
+    if expects_json:
+        try:
+            payload = await request.json()
+        except ValueError as exc:  # pragma: no cover - defensive guardrail
+            raise HTTPException(status_code=400, detail="Некорректный JSON-запрос") from exc
+        data = SimpleChatRequest(**payload)
+        message = data.message
+        system_prompt = data.system_prompt
+    else:
+        message = message_form
+        system_prompt = system_prompt_form
+
+    if not message or not message.strip():
+        raise HTTPException(status_code=422, detail="Сообщение не должно быть пустым")
     messages: list[dict[str, str]] = []
-    if request.system_prompt and request.system_prompt.strip():
-        messages.append({"role": "system", "content": request.system_prompt.strip()})
-    messages.append({"role": "user", "content": request.message})
+    if system_prompt and system_prompt.strip():
+        messages.append({"role": "system", "content": system_prompt.strip()})
+    messages.append({"role": "user", "content": message})
 
     return await _perform_chat(messages)
 
@@ -107,16 +134,94 @@ async def health() -> HealthResponse:
     )
 
 
-async def _extract_ai_specification(file: UploadFile) -> SpecificationExtractionResponse:
+def _extract_internal_specification_from_payload(
+    filename: str,
+    payload: bytes,
+) -> SpecificationExtractionResponse:
+    try:
+        suffix = filename.lower()
+        if not suffix.endswith((".docx", ".txt", ".md")):
+            raise UnsupportedDocumentError("Поддерживаются только файлы DOCX и TXT")
+        blocks = load_blocks(filename, payload)
+        result = extract_specification_from_blocks(blocks)
+    except UnsupportedDocumentError as exc:
+        raise HTTPException(status_code=415, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:  # pragma: no cover - defensive logging
+        logger.exception("Failed to parse document '%s'", filename)
+        raise HTTPException(status_code=400, detail="Не удалось обработать документ") from exc
+    specification = build_specification_response(result)
+    sections = split_into_sections(blocks)
+
+    export_payload = export_specification_to_json(
+        specification,
+        source_filename=filename,
+    )
+    exported_name = None
+    exported_base64 = None
+    specification_text = None
+    if export_payload:
+        path, data = export_payload
+        exported_name = path.name
+        exported_base64 = base64.b64encode(data).decode("ascii")
+        try:
+            specification_text = data.decode("utf-8")
+        except UnicodeDecodeError:  # pragma: no cover - fallback for unexpected encodings
+            specification_text = data.decode("utf-8", errors="replace")
+
+    combined_sections = export_sections_bundle(
+        sections,
+        source_filename=filename,
+        specification_text=specification_text,
+    )
+
+    combined_name = None
+    combined_base64 = None
+    combined_text = None
+    if combined_sections:
+        combined_path, combined_text = combined_sections
+        combined_name = combined_path.name
+        combined_base64 = base64.b64encode(combined_text.encode("utf-8")).decode("ascii")
+    return SpecificationExtractionResponse(
+        specification=specification,
+        debug=None,
+        exported_json_name=exported_name,
+        exported_json_base64=exported_base64,
+        combined_sections_name=combined_name,
+        combined_sections_base64=combined_base64,
+        combined_sections_text=combined_text,
+        sections=[
+            DocumentSection(
+                number=section.number,
+                title=section.title,
+                content=section.content,
+                filename=None,
+            )
+            for section in sections
+        ],
+    )
+
+async def _extract_ai_specification(
+    file: UploadFile,
+    prompt: str | None = None,
+) -> SpecificationExtractionResponse:
     payload = await file.read()
     try:
-        specification, debug = await detect_specification(file.filename or "", payload)
+        specification, debug = await detect_specification(
+            file.filename or "",
+            payload,
+            prompt=prompt,
+        )
     except httpx.HTTPStatusError as exc:  # pragma: no cover - defensive logging
-        logger.error("Ollama returned HTTP %s: %s", exc.response.status_code, exc.response.text)
-        raise HTTPException(status_code=502, detail="Ollama вернула ошибку") from exc
+        logger.warning(
+            "Neural specification service returned HTTP %s, falling back to internal logic",
+            exc.response.status_code,
+        )
+        return _extract_internal_specification_from_payload(file.filename or "", payload)
     except httpx.HTTPError as exc:  # pragma: no cover - defensive logging
-        logger.error("Error talking to Ollama: %s", exc)
-        raise HTTPException(status_code=502, detail="Не удалось подключиться к Ollama") from exc
+        logger.warning("Error talking to neural specification service, falling back: %s", exc)
+        return _extract_internal_specification_from_payload(file.filename or "", payload)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except Exception as exc:  # pragma: no cover - defensive logging
@@ -140,6 +245,7 @@ async def _extract_ai_specification(file: UploadFile) -> SpecificationExtraction
         exported_json_name=exported_name,
         exported_json_base64=exported_base64,
     )
+
 
 
 async def _extract_internal_specification(file: UploadFile) -> SpecificationExtractionResponse:
@@ -211,9 +317,11 @@ async def _extract_internal_specification(file: UploadFile) -> SpecificationExtr
 
 
 @app.post("/api/specification/ai", response_model=SpecificationExtractionResponse)
-async def specification_ai(file: UploadFile = File(...)) -> SpecificationExtractionResponse:
-    return await _extract_ai_specification(file)
-
+async def specification_ai(
+    file: UploadFile = File(...),
+    prompt: str | None = Form(default=None),
+) -> SpecificationExtractionResponse:
+    return await _extract_ai_specification(file, prompt)
 
 @app.post("/api/specification/internal", response_model=SpecificationExtractionResponse)
 async def specification_internal(file: UploadFile = File(...)) -> SpecificationExtractionResponse:

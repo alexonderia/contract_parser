@@ -41,10 +41,36 @@ export async function sendChatMessage(message: string, history: ChatHistoryMessa
   return handleResponse(response);
 }
 
-export async function sendSimpleChatMessage(message: string, systemPrompt?: string): Promise<ChatReply> {
+interface SimpleChatOptions {
+  systemPrompt?: string;
+  file?: File | null;
+}
+
+export async function sendSimpleChatMessage(
+  message: string,
+  options?: SimpleChatOptions,
+): Promise<ChatReply> {
+  const trimmedPrompt = options?.systemPrompt?.trim();
+  const file = options?.file ?? null;
+
+  if (file) {
+    const formData = new FormData();
+    formData.append("message", message);
+    if (trimmedPrompt) {
+      formData.append("system_prompt", trimmedPrompt);
+    }
+    formData.append("file", file);
+
+    const response = await fetch(resolveApiUrl("/api/chat/simple"), {
+      method: "POST",
+      body: formData,
+    });
+
+    return handleResponse(response);
+  }
   const payload: { message: string; system_prompt?: string } = { message };
-  if (systemPrompt && systemPrompt.trim()) {
-    payload.system_prompt = systemPrompt.trim();
+  if (trimmedPrompt) {
+    payload.system_prompt = trimmedPrompt;
   }
 
   const response = await fetch(resolveApiUrl("/api/chat/simple"), {

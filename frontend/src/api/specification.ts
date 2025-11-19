@@ -59,9 +59,13 @@ export interface SpecificationFileResponse {
 export async function uploadSpecificationDocument(
   file: File,
   mode: SpecificationMode,
+  prompt?: string,
 ): Promise<SpecificationExtractionResponse> {
   const formData = new FormData();
   formData.append("file", file);
+  if (prompt && prompt.trim()) {
+    formData.append("prompt", prompt.trim());
+  }
 
   const endpoint = mode === "ai" ? "/api/specification/ai" : "/api/specification/internal";
 

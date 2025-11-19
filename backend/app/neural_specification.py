@@ -172,14 +172,24 @@ def _find_tables_in_section(
 
     return detected
 
-async def detect_specification(filename: str, payload: bytes) -> tuple[SpecificationResponse, LlmDebugInfo]:
+async def detect_specification(
+    filename: str,
+    payload: bytes,
+    *,
+    prompt: str | None = None,
+) -> tuple[SpecificationResponse, LlmDebugInfo]:
     blocks = load_blocks(filename, payload)
     lines, mapping = blocks_to_prompt_lines_with_mapping(blocks)
     enumerated = _enumerate_document(lines)
 
+    if prompt and prompt.strip():
+        user_prompt = f"{prompt.strip()}\n\nДокумент:\n{enumerated}"
+    else:
+        user_prompt = _USER_PROMPT_TEMPLATE.substitute(document=enumerated)
+
     messages = [
         {"role": "system", "content": _SYSTEM_PROMPT},
-        {"role": "user", "content": _USER_PROMPT_TEMPLATE.substitute(document=enumerated)},
+        {"role": "user", "content": user_prompt},
     ]
 
     raw = await client.chat(messages)

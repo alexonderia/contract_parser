@@ -40,6 +40,7 @@ type SpecificationChatMessage = BaseChatMessage & {
   combinedSectionsName?: string | null;
   combinedSectionsBase64?: string | null;
   combinedSectionsText?: string | null;
+  prompt?: string | null;
 };
 
 type ChatMessage = TextChatMessage | SpecificationChatMessage;
@@ -102,7 +103,12 @@ function DebugDetails({ debug }: { debug?: LlmDebugInfo | null }) {
   );
 }
 
-function useChatState(initialMessages: ChatMessage[]) {
+interface ChatStateOptions {
+  getAttachment?: () => File | null;
+  clearAttachment?: () => void;
+}
+
+function useChatState(initialMessages: ChatMessage[], options?: ChatStateOptions) {
   const [messages, setMessages] = useState<ChatMessage[]>(() => initialMessages);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -129,8 +135,14 @@ function useChatState(initialMessages: ChatMessage[]) {
       const hasUserHistory = historyPayload.some((item) => item.role === "user");
 
       let reply: ChatReply;
+      const attachment = options?.getAttachment?.() ?? null;
+      let shouldClearAttachment = false
       if (!hasUserHistory) {
-        reply = await sendSimpleChatMessage(trimmed);
+        reply = await sendSimpleChatMessage(
+          trimmed,
+          attachment ? { file: attachment } : undefined,
+        );
+        shouldClearAttachment = Boolean(attachment);
       } else {
         reply = await sendChatMessage(trimmed, historyPayload);
       }
@@ -138,6 +150,9 @@ function useChatState(initialMessages: ChatMessage[]) {
         ...prev,
         { role: "assistant", kind: "text", content: reply.reply || "(пустой ответ)", debug: reply.debug },
       ]);
+      if (shouldClearAttachment) {
+        options?.clearAttachment?.();
+      }
     } catch (err) {
       const description = err instanceof Error ? err.message : "Произошла неизвестная ошибка";
       setError(description);
@@ -167,7 +182,7 @@ function useChatState(initialMessages: ChatMessage[]) {
 
 
 function ChatPanel() {
-  
+  const [simpleChatFile, setSimpleChatFile] = useState<File | null>(null);
   const {
     messages,
     input,
@@ -179,25 +194,56 @@ function ChatPanel() {
     setMessages,
     setError,
     setIsLoading,
-  } = useChatState([welcomeMessage]);
+  } = useChatState([welcomeMessage], {
+    getAttachment: () => simpleChatFile,
+    clearAttachment: () => setSimpleChatFile(null),
+  });
   const [specMode, setSpecMode] = useState<SpecificationMode>("ai");
+  
+  const [specPrompt, setSpecPrompt] = useState("");
+  const [selectedSpecFile, setSelectedSpecFile] = useState<File | null>(null);
 
-  const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
+  const handleSimpleChatFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null;
     event.target.value = "";
-    if (!file || isLoading) {
+    setSimpleChatFile(file);
+  };
+  const handlePromptFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null;
+    event.target.value = "";
+    setSelectedSpecFile(file);
+  };
+
+  const handlePromptAndFileSubmit = async () => {
+    if (!selectedSpecFile || isLoading) {
+      if (!selectedSpecFile) {
+        setError("Прикрепите документ для обработки промта");
+      }
       return;
     }
 
+    const promptText = specPrompt.trim();
+    const file = selectedSpecFile;
     setMessages((prev) => [
       ...prev,
-      { role: "user", kind: "text", content: `Загрузил файл «${file.name}» для режима ${specMode}` },
+      {
+        role: "user",
+        kind: "text",
+        content:
+          promptText.length > 0
+            ? `Промт для «${file.name}»: ${promptText}`
+            : `Промт (пусто) для «${file.name}»`,
+      },
     ]);
     setIsLoading(true);
     setError(null);
 
     try {
-      const result: SpecificationExtractionResponse = await uploadSpecificationDocument(file, specMode);
+      const result: SpecificationExtractionResponse = await uploadSpecificationDocument(
+        file,
+        specMode,
+        promptText,
+      );
       const summary = formatSpecificationReply(
         result.specification,
         file.name,
@@ -219,8 +265,12 @@ function ChatPanel() {
           combinedSectionsName: result.combined_sections_name,
           combinedSectionsBase64: result.combined_sections_base64,
           combinedSectionsText: result.combined_sections_text,
+          prompt: promptText || null,
         },
       ]);
+
+      setSpecPrompt("");
+      setSelectedSpecFile(null);
 
     } catch (err) {
       const description = err instanceof Error ? err.message : "Не удалось обработать документ";
@@ -251,6 +301,12 @@ function ChatPanel() {
             {message.kind === "specification" ? (
               <div className="chat-message__specification">
                 <p className="chat-message__summary">{message.content}</p>
+                {message.prompt ? (
+                  <div className="chat-message__prompt">
+                    <span className="chat-message__prompt-label">Промт:</span>
+                    <p className="chat-message__prompt-value">{message.prompt}</p>
+                  </div>
+                ) : null}
                 <SpecificationPreview
                   filename={message.filename}
                   specification={message.specification}
@@ -284,14 +340,50 @@ function ChatPanel() {
           <option value="internal">Внутренняя обработка</option>
         </select>
       </div>
-      <label className={`file-uploader${isLoading ? " file-uploader--disabled" : ""}`}>
-        <input
-          type="file"
-          accept=".docx,.txt,.md,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
-          onChange={handleFileChange}
+      <div className="spec-request">
+        <label htmlFor="spec-prompt">Промт для анализа документа:</label>
+        <textarea
+          id="spec-prompt"
+          className="spec-request__input"
+          placeholder="Опишите, что нужно найти в документе"
+          value={specPrompt}
+          onChange={(event) => setSpecPrompt(event.target.value)}
+          rows={4}
           disabled={isLoading}
         />
-        <span>{isLoading ? "Обработка файла..." : "📎 Прикрепить документ"}</span>
+        <label className={`file-uploader${isLoading ? " file-uploader--disabled" : ""}`}>
+          <input
+            type="file"
+            accept=".docx,.txt,.md,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
+            onChange={handlePromptFileChange}
+            disabled={isLoading}
+          />
+          <span>
+            {isLoading
+              ? "Обработка файла..."
+              : selectedSpecFile
+              ? `📎 Файл: ${selectedSpecFile.name}`
+              : "📎 Прикрепить документ"}
+          </span>
+        </label>
+        <button
+          className="button spec-request__submit"
+          type="button"
+          onClick={handlePromptAndFileSubmit}
+          disabled={isLoading || !selectedSpecFile}
+        >
+          {isLoading ? "Отправка..." : "Отправить промт и файл"}
+        </button>
+      </div>
+      <label className={`file-uploader${isLoading ? " file-uploader--disabled" : ""}`}>
+        <input type="file" onChange={handleSimpleChatFileChange} disabled={isLoading} />
+        <span>
+          {isLoading
+            ? "Загрузка..."
+            : simpleChatFile
+            ? `📎 Файл для сообщения: ${simpleChatFile.name}`
+            : "📎 Прикрепить файл к сообщению"}
+        </span>
       </label>
       <textarea
         className="chat-panel__input"
