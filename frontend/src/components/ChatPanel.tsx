@@ -165,32 +165,6 @@ function useChatState(initialMessages: ChatMessage[]) {
   } as const;
 }
 
-function ChatMessageItem({ message }: { message: ChatMessage }) {
-  const authorLabel = message.role === "user" ? "Вы" : "Модель";
-
-  return (
-    <div className={`chat-message chat-message--${message.role}`}>
-      <strong>{authorLabel}</strong>
-      {message.kind === "specification" ? (
-        <div className="chat-message__specification">
-          <p className="chat-message__summary">{message.content}</p>
-          <SpecificationPreview
-            filename={message.filename}
-            specification={message.specification}
-            exportedJsonName={message.exportedJsonName}
-            exportedJsonBase64={message.exportedJsonBase64}
-          />
-          <DebugDetails debug={message.debug} />
-        </div>
-      ) : (
-        <div>
-          <p>{message.content}</p>
-          <DebugDetails debug={message.debug} />
-        </div>
-      )}
-    </div>
-  );
-}
 
 function ChatPanel() {
   
