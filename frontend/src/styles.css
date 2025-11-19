@@ -359,6 +359,41 @@ body {
   font-weight: 600;
 }
 
+.specification-preview__combined {
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 0.75rem;
+  padding: 0.85rem;
+  background: rgba(15, 23, 42, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.specification-preview__combined-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.specification-preview__combined-title {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.specification-preview__combined-content {
+  margin: 0;
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 0.75rem;
+  border-radius: 0.65rem;
+  border: 1px solid #1e293b;
+  white-space: pre-wrap;
+  max-height: 320px;
+  overflow: auto;
+}
+
 .specification-preview__anchors {
   display: grid;
   gap: 0.45rem;

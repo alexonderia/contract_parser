@@ -73,7 +73,9 @@ class DocumentSection(BaseModel):
     )
     title: str = Field(..., description="Заголовок или текст раздела")
     content: str = Field(..., description="Полное содержимое раздела")
-    filename: str = Field(..., description="Имя txt-файла с сохраненным разделом")
+    filename: str | None = Field(
+        default=None, description="Имя txt-файла с сохраненным разделом"
+    )
 
 
 class SpecificationResponse(BaseModel):
@@ -99,7 +101,19 @@ class SpecificationExtractionResponse(BaseModel):
     )
     sections: list[DocumentSection] = Field(
         default_factory=list,
-        description="Найденные разделы контракта, сохраненные в txt-файлы",
+        description="Найденные разделы контракта (для отображения в интерфейсе)",
+    )
+    combined_sections_name: str | None = Field(
+        default=None,
+        description="Имя объединенного txt-файла с шапкой и разделами",
+    )
+    combined_sections_base64: str | None = Field(
+        default=None,
+        description="Содержимое объединенного txt-файла в base64",
+    )
+    combined_sections_text: str | None = Field(
+        default=None,
+        description="Текстовое содержимое объединенного файла",
     )
 
 

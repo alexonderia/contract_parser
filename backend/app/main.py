@@ -26,7 +26,7 @@ from .schemas import (
 )
 from .specification_builder import build_specification_response
 from .specification_exporter import export_specification_to_json
-from .section_processing import export_sections_to_txt, split_into_sections
+from .section_processing import export_sections_bundle, split_into_sections
 
 logger = logging.getLogger("contract_parser.backend")
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
@@ -160,33 +160,52 @@ async def _extract_internal_specification(file: UploadFile) -> SpecificationExtr
         raise HTTPException(status_code=400, detail="Не удалось обработать документ") from exc
     specification = build_specification_response(result)
     sections = split_into_sections(blocks)
-    exported_sections = export_sections_to_txt(
-        sections, source_filename=file.filename
-    )
+    
     export_payload = export_specification_to_json(
         specification,
         source_filename=file.filename,
     )
     exported_name = None
     exported_base64 = None
+    specification_text = None
     if export_payload:
         path, data = export_payload
         exported_name = path.name
         exported_base64 = base64.b64encode(data).decode("ascii")
+        try:
+            specification_text = data.decode("utf-8")
+        except UnicodeDecodeError:  # pragma: no cover - fallback for unexpected encodings
+            specification_text = data.decode("utf-8", errors="replace")
 
+    combined_sections = export_sections_bundle(
+        sections,
+        source_filename=file.filename,
+        specification_text=specification_text,
+    )
+
+    combined_name = None
+    combined_base64 = None
+    combined_text = None
+    if combined_sections:
+        combined_path, combined_text = combined_sections
+        combined_name = combined_path.name
+        combined_base64 = base64.b64encode(combined_text.encode("utf-8")).decode("ascii")
     return SpecificationExtractionResponse(
         specification=specification,
         debug=None,
         exported_json_name=exported_name,
         exported_json_base64=exported_base64,
+        combined_sections_name=combined_name,
+        combined_sections_base64=combined_base64,
+        combined_sections_text=combined_text,
         sections=[
             DocumentSection(
                 number=section.number,
                 title=section.title,
                 content=section.content,
-                filename=path.name,
+                filename=None,
             )
-            for section, path in exported_sections
+            for section in sections
         ],
     )
 

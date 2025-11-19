@@ -29,7 +29,7 @@ export interface DocumentSection {
   number: number | null;
   title: string;
   content: string;
-  filename: string;
+  filename?: string | null;
 }
 
 export interface SpecificationResponse {
@@ -45,6 +45,9 @@ export interface SpecificationExtractionResponse {
   exported_json_name?: string | null;
   exported_json_base64?: string | null;
   sections?: DocumentSection[];
+  combined_sections_name?: string | null;
+  combined_sections_base64?: string | null;
+  combined_sections_text?: string | null;
 }
 
 export interface SpecificationFileResponse {

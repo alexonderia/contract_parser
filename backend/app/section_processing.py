@@ -132,4 +132,57 @@ def export_sections_to_txt(
     return exported
 
 
-__all__ = ["SectionChunk", "split_into_sections", "export_sections_to_txt"]
+def build_sections_instruction(
+    sections: list[SectionChunk], specification_text: str | None = None
+) -> str:
+    """Собирает все разделы и спецификацию в один текст по заданному шаблону."""
+
+    parts: list[str] = []
+    for section in sections:
+        is_header = section.number is None
+        instruction_label = "шапке" if is_header else f"разделу {section.number}"
+        section_label = "Шапка" if is_header else f"Раздел {section.number}"
+        parts.append(f"Инструкция к {instruction_label}:")
+        parts.append(f"{section_label}:")
+        parts.append(section.content or "(раздел пуст)")
+        parts.append("")
+
+    if specification_text:
+        parts.append("Инструкция к спецификации:")
+        parts.append("Спецификация:")
+        parts.append(specification_text)
+
+    return "\n".join(parts).rstrip()
+
+
+def export_sections_bundle(
+    sections: list[SectionChunk],
+    *,
+    source_filename: str | None = None,
+    export_dir: Path | None = None,
+    specification_text: str | None = None,
+) -> tuple[Path, str] | None:
+    """Сохраняет все разделы в один txt-файл и возвращает путь и содержимое."""
+
+    if not sections:
+        return None
+
+    base_directory = Path(export_dir or Path(__file__).resolve().parent / "exports")
+    base_directory.mkdir(parents=True, exist_ok=True)
+
+    stem = Path(source_filename or "document").stem or "document"
+    sanitized_stem = _sanitize(stem)
+    content = build_sections_instruction(sections, specification_text)
+    target = _next_available_path(base_directory, f"{sanitized_stem}_sections.txt")
+    target.write_text(content, encoding="utf-8")
+
+    return target, content
+
+
+__all__ = [
+    "SectionChunk",
+    "split_into_sections",
+    "export_sections_to_txt",
+    "export_sections_bundle",
+    "build_sections_instruction",
+]

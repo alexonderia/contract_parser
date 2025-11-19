@@ -82,16 +82,23 @@ interface Props {
   exportedJsonName?: string | null;
   exportedJsonBase64?: string | null;
   sections?: DocumentSection[];
+  combinedSectionsName?: string | null;
+  combinedSectionsBase64?: string | null;
+  combinedSectionsText?: string | null;
 }
 
-function downloadBase64File(base64: string, filename: string) {
+function downloadBase64File(
+  base64: string,
+  filename: string,
+  mimeType: string = "application/json",
+) {
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
   for (let index = 0; index < binary.length; index += 1) {
     bytes[index] = binary.charCodeAt(index);
   }
   const blob = new Blob([bytes], {
-    type: "application/json",
+    type: mimeType,
   });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -108,7 +115,9 @@ export default function SpecificationPreview({
   specification,
   exportedJsonName,
   exportedJsonBase64,
-  sections,
+  combinedSectionsName,
+  combinedSectionsBase64,
+  combinedSectionsText,
 }: Props) {
   return (
     <div className="specification-preview">
@@ -125,21 +134,29 @@ export default function SpecificationPreview({
           </button>
         ) : null}
       </div>
-      {sections && sections.length > 0 ? (
-        <div className="specification-preview__sections">
-          <h4 className="specification-preview__sections-title">Разделы документа</h4>
-          <ul className="specification-preview__section-list">
-            {sections.map((section) => (
-              <li key={`${section.filename}-${section.number ?? "header"}`}>
-                <div className="specification-preview__section-title">
-                  {section.number !== null ? `${section.number}. ` : "Шапка: "}
-                  {section.title}
-                  <span className="specification-preview__section-filename"> · {section.filename}</span>
-                </div>
-                <p className="specification-preview__section-content">{section.content || "(раздел пуст)"}</p>
-              </li>
-            ))}
-          </ul>
+      {combinedSectionsText ? (
+        <div className="specification-preview__combined">
+          <div className="specification-preview__combined-header">
+            <h4 className="specification-preview__combined-title">
+              Файл с инструкциями для разделов и спецификации
+            </h4>
+            {combinedSectionsBase64 && combinedSectionsName ? (
+              <button
+                type="button"
+                className="button specification-preview__download"
+                onClick={() =>
+                  downloadBase64File(
+                    combinedSectionsBase64,
+                    combinedSectionsName,
+                    "text/plain;charset=utf-8",
+                  )
+                }
+              >
+                Скачать файл разделов и спецификации (TXT)
+              </button>
+            ) : null}
+          </div>
+          <pre className="specification-preview__combined-content">{combinedSectionsText}</pre>
         </div>
       ) : null}
       <div className="specification-preview__anchors">

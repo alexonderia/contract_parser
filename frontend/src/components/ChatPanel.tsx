@@ -38,6 +38,9 @@ type SpecificationChatMessage = BaseChatMessage & {
   exportedJsonName?: string | null;
   exportedJsonBase64?: string | null;
   sections?: DocumentSection[];
+  combinedSectionsName?: string | null;
+  combinedSectionsBase64?: string | null;
+  combinedSectionsText?: string | null;
 };
 
 type ChatMessage = TextChatMessage | SpecificationChatMessage;
@@ -214,6 +217,9 @@ function ChatPanel() {
           exportedJsonName: result.exported_json_name,
           exportedJsonBase64: result.exported_json_base64,
           sections: result.sections,
+          combinedSectionsName: result.combined_sections_name,
+          combinedSectionsBase64: result.combined_sections_base64,
+          combinedSectionsText: result.combined_sections_text,
         },
       ]);
 
@@ -252,6 +258,9 @@ function ChatPanel() {
                   exportedJsonName={message.exportedJsonName}
                   exportedJsonBase64={message.exportedJsonBase64}
                   sections={message.sections}
+                  combinedSectionsName={message.combinedSectionsName}
+                  combinedSectionsBase64={message.combinedSectionsBase64}
+                  combinedSectionsText={message.combinedSectionsText}
                 />
                 <DebugDetails debug={message.debug} />
               </div>
