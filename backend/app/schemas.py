@@ -67,6 +67,17 @@ class SpecificationTable(BaseModel):
     rows: list[list[str]] = Field(..., description="Содержимое таблицы построчно")
 
 
+class DocumentSection(BaseModel):
+    number: int | None = Field(
+        default=None, description="Номер раздела (None для шапки документа)"
+    )
+    title: str = Field(..., description="Заголовок или текст раздела")
+    content: str = Field(..., description="Полное содержимое раздела")
+    filename: str | None = Field(
+        default=None, description="Имя txt-файла с сохраненным разделом"
+    )
+
+
 class SpecificationResponse(BaseModel):
     heading: str = Field(..., description="Заголовок раздела 'Спецификация'")
     start_anchor: SpecificationAnchor = Field(..., description="Начальная точка раздела")
@@ -87,6 +98,22 @@ class SpecificationExtractionResponse(BaseModel):
     exported_json_base64: str | None = Field(
         default=None,
         description="Содержимое JSON-файла в кодировке base64",
+    )
+    sections: list[DocumentSection] = Field(
+        default_factory=list,
+        description="Найденные разделы контракта (для отображения в интерфейсе)",
+    )
+    combined_sections_name: str | None = Field(
+        default=None,
+        description="Имя объединенного txt-файла с шапкой и разделами",
+    )
+    combined_sections_base64: str | None = Field(
+        default=None,
+        description="Содержимое объединенного txt-файла в base64",
+    )
+    combined_sections_text: str | None = Field(
+        default=None,
+        description="Текстовое содержимое объединенного файла",
     )
 
 

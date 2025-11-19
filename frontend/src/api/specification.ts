@@ -25,6 +25,13 @@ export interface SpecificationTable {
   rows: string[][];
 }
 
+export interface DocumentSection {
+  number: number | null;
+  title: string;
+  content: string;
+  filename?: string | null;
+}
+
 export interface SpecificationResponse {
   heading: string;
   start_anchor: SpecificationAnchor;
@@ -37,6 +44,10 @@ export interface SpecificationExtractionResponse {
   debug?: LlmDebugInfo | null;
   exported_json_name?: string | null;
   exported_json_base64?: string | null;
+  sections?: DocumentSection[];
+  combined_sections_name?: string | null;
+  combined_sections_base64?: string | null;
+  combined_sections_text?: string | null;
 }
 
 export interface SpecificationFileResponse {

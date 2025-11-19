@@ -9,6 +9,7 @@ import {
   type SpecificationMode,
   type SpecificationResponse,
   type LlmDebugInfo,
+  type DocumentSection,
 } from "../api/specification";
 import SpecificationPreview from "./SpecificationPreview";
 import {
@@ -35,6 +36,10 @@ type SpecificationChatMessage = BaseChatMessage & {
   specification: SpecificationResponse;
   exportedJsonName?: string | null;
   exportedJsonBase64?: string | null;
+  sections?: DocumentSection[];
+  combinedSectionsName?: string | null;
+  combinedSectionsBase64?: string | null;
+  combinedSectionsText?: string | null;
 };
 
 type ChatMessage = TextChatMessage | SpecificationChatMessage;
@@ -51,6 +56,7 @@ function formatSpecificationReply(
   result: SpecificationResponse,
   filename: string,
   mode: SpecificationMode,
+  sections?: DocumentSection[],
 ): string {
   const parts = [
     `🔍 Найдена спецификация в документе «${filename}».`,
@@ -58,11 +64,19 @@ function formatSpecificationReply(
     `Таблиц: ${result.tables.length}.`,
   ];
 
-  const firstAnchor = result.tables[0]?.start_anchor ?? result.start_anchor;
+  // const firstAnchor = result.tables[0]?.start_anchor ?? result.start_anchor;
+  const firstAnchor = result.start_anchor;
   parts.push(
     `Начало: блок #${firstAnchor.index + 1} (${firstAnchor.type}). ` +
       `Конец: блок #${result.end_anchor.index + 1} (${result.end_anchor.type}).`,
   );
+
+  if (sections && sections.length > 0) {
+    const headerCount = sections.some((section) => section.number === null) ? 1 : 0;
+    const numbered = sections.length - headerCount;
+    parts.push(`Разделов: ${numbered} + шапка.`);
+  }
+
 
   return parts.join(" ");
 }
@@ -210,8 +224,12 @@ function ChatPanel() {
 
     try {
       const result: SpecificationExtractionResponse = await uploadSpecificationDocument(file, specMode);
-      const summary = formatSpecificationReply(result.specification, file.name, specMode);
-      
+      const summary = formatSpecificationReply(
+        result.specification,
+        file.name,
+        specMode,
+        result.sections,
+      );
       setMessages((prev) => [
         ...prev,
         {
@@ -223,6 +241,10 @@ function ChatPanel() {
           debug: result.debug,
           exportedJsonName: result.exported_json_name,
           exportedJsonBase64: result.exported_json_base64,
+          sections: result.sections,
+          combinedSectionsName: result.combined_sections_name,
+          combinedSectionsBase64: result.combined_sections_base64,
+          combinedSectionsText: result.combined_sections_text,
         },
       ]);
 
@@ -247,7 +269,33 @@ function ChatPanel() {
       <h2>Чат</h2>
       <div className="chat-panel__messages">
         {messages.map((message, index) => (
-          <ChatMessageItem key={`${message.kind}-${index}`} message={message} />
+          <div
+            key={`${message.kind}-${index}`}
+            className={`chat-message chat-message--${message.role}`}
+          >
+            <strong>{message.role === "user" ? "Вы" : "Модель"}</strong>
+            {message.kind === "specification" ? (
+              <div className="chat-message__specification">
+                <p className="chat-message__summary">{message.content}</p>
+                <SpecificationPreview
+                  filename={message.filename}
+                  specification={message.specification}
+                  exportedJsonName={message.exportedJsonName}
+                  exportedJsonBase64={message.exportedJsonBase64}
+                  sections={message.sections}
+                  combinedSectionsName={message.combinedSectionsName}
+                  combinedSectionsBase64={message.combinedSectionsBase64}
+                  combinedSectionsText={message.combinedSectionsText}
+                />
+                <DebugDetails debug={message.debug} />
+              </div>
+            ) : (
+              <div>
+                <p>{message.content}</p>
+                <DebugDetails debug={message.debug} />
+              </div>
+            )}
+          </div>
         ))}
       </div>
       <div className="spec-mode">

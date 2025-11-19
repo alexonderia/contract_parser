@@ -7,7 +7,11 @@ import httpx
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
-from .document_parser import UnsupportedDocumentError, extract_specification
+from .document_parser import (
+    UnsupportedDocumentError,
+    extract_specification_from_blocks,
+)
+from .document_processing import load_blocks
 from .llm_utils import build_debug_info, extract_reply
 from .neural_specification import detect_specification
 from .ollama import client
@@ -16,11 +20,13 @@ from .schemas import (
     ChatResponse,
     HealthResponse,
     LlmDebugInfo,
+    DocumentSection,
     SimpleChatRequest,
     SpecificationExtractionResponse,
 )
 from .specification_builder import build_specification_response
 from .specification_exporter import export_specification_to_json
+from .section_processing import export_sections_bundle, split_into_sections
 
 logger = logging.getLogger("contract_parser.backend")
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
@@ -139,7 +145,12 @@ async def _extract_ai_specification(file: UploadFile) -> SpecificationExtraction
 async def _extract_internal_specification(file: UploadFile) -> SpecificationExtractionResponse:
     payload = await file.read()
     try:
-        result = extract_specification(file.filename or "", payload)
+        suffix = (file.filename or "").lower()
+        if not suffix.endswith((".docx", ".txt", ".md")):
+            raise UnsupportedDocumentError("Поддерживаются только файлы DOCX и TXT")
+
+        blocks = load_blocks(file.filename or "", payload)
+        result = extract_specification_from_blocks(blocks)
     except UnsupportedDocumentError as exc:
         raise HTTPException(status_code=415, detail=str(exc)) from exc
     except ValueError as exc:
@@ -148,22 +159,54 @@ async def _extract_internal_specification(file: UploadFile) -> SpecificationExtr
         logger.exception("Failed to parse document '%s'", file.filename)
         raise HTTPException(status_code=400, detail="Не удалось обработать документ") from exc
     specification = build_specification_response(result)
+    sections = split_into_sections(blocks)
+    
     export_payload = export_specification_to_json(
         specification,
         source_filename=file.filename,
     )
     exported_name = None
     exported_base64 = None
+    specification_text = None
     if export_payload:
         path, data = export_payload
         exported_name = path.name
         exported_base64 = base64.b64encode(data).decode("ascii")
+        try:
+            specification_text = data.decode("utf-8")
+        except UnicodeDecodeError:  # pragma: no cover - fallback for unexpected encodings
+            specification_text = data.decode("utf-8", errors="replace")
 
+    combined_sections = export_sections_bundle(
+        sections,
+        source_filename=file.filename,
+        specification_text=specification_text,
+    )
+
+    combined_name = None
+    combined_base64 = None
+    combined_text = None
+    if combined_sections:
+        combined_path, combined_text = combined_sections
+        combined_name = combined_path.name
+        combined_base64 = base64.b64encode(combined_text.encode("utf-8")).decode("ascii")
     return SpecificationExtractionResponse(
         specification=specification,
         debug=None,
         exported_json_name=exported_name,
         exported_json_base64=exported_base64,
+        combined_sections_name=combined_name,
+        combined_sections_base64=combined_base64,
+        combined_sections_text=combined_text,
+        sections=[
+            DocumentSection(
+                number=section.number,
+                title=section.title,
+                content=section.content,
+                filename=None,
+            )
+            for section in sections
+        ],
     )
 
 
