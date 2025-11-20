@@ -121,3 +121,27 @@ class CroppedSpecResponse(BaseModel):
     specification: SpecificationResponse = Field(...)
     cropped_file_base64: str = Field(..., description="DOCX файла, base64 без префикса data:")
     cropped_file_name: str = Field(..., description="Имя файла для сохранения на клиенте")
+
+
+class SectionReview(BaseModel):
+    title: str = Field(..., description="Название раздела")
+    resume: str = Field(..., description="Краткое резюме раздела")
+    risks: str = Field(..., description="Перечень рисков по разделу")
+    score: str = Field(..., description="Оценка соответствия раздела")
+
+
+class SectionReviewResponse(BaseModel):
+    reviews: list[SectionReview] = Field(..., description="Разбор каждого раздела")
+    overall_score: float | None = Field(
+        default=None, description="Средняя оценка по всем разделам"
+    )
+    inaccuracy: str | None = Field(
+        default=None, description="Ключевые неточности по документу"
+    )
+    red_flags: str | None = Field(
+        default=None, description="Серьезные ошибки по документу"
+    )
+    html: str = Field(..., description="HTML-страница со сводкой по разделам")
+    debug: LlmDebugInfo | None = Field(
+        default=None, description="Отладочная информация с промптом и ответом"
+    )

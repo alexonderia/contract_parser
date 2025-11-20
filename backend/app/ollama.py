@@ -28,6 +28,9 @@ class OllamaClient:
             "model": self.model,
             "messages": list(messages),
             "stream": False,
+            "options": {
+                "temperature": 0 # дефолт
+            }
         }
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             response = await client.post(f"{self.base_url}/api/chat", json=payload)

@@ -56,6 +56,21 @@ export interface SpecificationFileResponse {
   cropped_file_base64: string;
 }
 
+export interface SectionReview {
+  title: string;
+  resume: string;
+  risks: string;
+  score: string;
+}
+
+export interface SectionReviewResponse {
+  reviews: SectionReview[];
+  overall_score?: number | null;
+  red_flags?: string | null;
+  html: string;
+  debug?: LlmDebugInfo | null;
+}
+
 export async function uploadSpecificationDocument(
   file: File,
   mode: SpecificationMode,
@@ -81,4 +96,24 @@ export async function uploadSpecificationDocument(
   }
 
   return (await response.json()) as SpecificationExtractionResponse;
+}
+
+export async function uploadInstructionFile(
+  file: File,
+): Promise<SectionReviewResponse> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const response = await fetch(resolveApiUrl("/api/sections/review"), {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    const message = payload?.detail ?? payload?.error ?? "Не удалось обработать файл";
+    throw new Error(message);
+  }
+
+  return (await response.json()) as SectionReviewResponse;
 }

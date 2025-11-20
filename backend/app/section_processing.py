@@ -100,6 +100,18 @@ def _next_available_path(directory: Path, filename: str) -> Path:
             return updated
         counter += 1
 
+def _load_instruction_text(number: int | None) -> str | None:
+    """Return predefined instruction text for a section number if available."""
+
+    index = number or 0
+    instructions_dir = Path(__file__).resolve().parent / "instractions"
+    path = instructions_dir / f"{index}.txt"
+    try:
+        if path.exists():
+            return path.read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    return None
 
 def export_sections_to_txt(
     sections: list[SectionChunk],
@@ -142,14 +154,20 @@ def build_sections_instruction(
         is_header = section.number is None
         instruction_label = "шапке" if is_header else f"разделу {section.number}"
         section_label = "Шапка" if is_header else f"Раздел {section.number}"
-        parts.append(f"Инструкция к {instruction_label}:")
+        # parts.append(f"Инструкция к {instruction_label}:")
+        instruction_text = _load_instruction_text(section.number)
+        if instruction_text:
+            parts.append(instruction_text)
         parts.append(f"{section_label}:")
         parts.append(section.content or "(раздел пуст)")
         parts.append("")
 
     if specification_text:
         parts.append("Инструкция к спецификации:")
-        parts.append("Спецификация:")
+        instruction_text = _load_instruction_text(16)
+        if instruction_text:
+            parts.append(instruction_text)
+        # parts.append("Спецификация:")
         parts.append(specification_text)
 
     return "\n".join(parts).rstrip()

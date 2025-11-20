@@ -21,12 +21,14 @@ from .schemas import (
     HealthResponse,
     LlmDebugInfo,
     DocumentSection,
+    SectionReviewResponse,
     SimpleChatRequest,
     SpecificationExtractionResponse,
 )
 from .specification_builder import build_specification_response
 from .specification_exporter import export_specification_to_json
 from .section_processing import export_sections_bundle, split_into_sections
+from .section_reviews import evaluate_section_file
 
 logger = logging.getLogger("contract_parser.backend")
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
@@ -146,6 +148,43 @@ async def simple_chat(
     # 5. Вызываем модель
     return await _perform_chat(messages)
 
+@app.post("/api/sections/review", response_model=SectionReviewResponse)
+async def review_sections(file: UploadFile = File(...)) -> SectionReviewResponse:
+    content_bytes = await file.read()
+    try:
+        content = content_bytes.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise HTTPException(status_code=400, detail="Файл должен быть в кодировке UTF-8") from exc
+
+    content = content.strip()
+    if not content:
+        raise HTTPException(status_code=422, detail="Файл с инструкциями пуст")
+
+    try:
+        reviews, overall_score, inaccuracy, red_flags, html_report, debug = await evaluate_section_file(
+            content
+        )
+    except httpx.HTTPStatusError as exc:  # pragma: no cover - defensive logging
+        logger.error(
+            "Ollama returned HTTP %s while reviewing sections: %s",
+            exc.response.status_code,
+            exc.response.text,
+        )
+        raise HTTPException(status_code=502, detail="Ollama вернула ошибку") from exc
+    except httpx.HTTPError as exc:  # pragma: no cover - defensive logging
+        logger.error("Error talking to Ollama during section review: %s", exc)
+        raise HTTPException(status_code=502, detail="Не удалось подключиться к Ollama") from exc
+
+    _perform_debug_logging(debug)
+
+    return SectionReviewResponse(
+        reviews=reviews,
+        overall_score=overall_score,
+        inaccuracy=inaccuracy,
+        red_flags=red_flags,
+        html=html_report,
+        debug=debug,
+    )
 
 @app.get("/api/health", response_model=HealthResponse)
 async def health() -> HealthResponse:

@@ -1,11 +1,13 @@
 import { type ChangeEvent, useState } from "react";
 import {
   uploadSpecificationDocument,
+  uploadInstructionFile,
   type SpecificationExtractionResponse,
   type SpecificationMode,
   type SpecificationResponse,
   type LlmDebugInfo,
   type DocumentSection,
+  type SectionReview,
 } from "../api/specification";
 import SpecificationPreview from "./SpecificationPreview";
 import DebugDetails from "./DebugDetails";
@@ -59,11 +61,33 @@ export default function SpecificationPanel() {
   const [results, setResults] = useState<SpecificationResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [instructionFile, setInstructionFile] = useState<File | null>(null);
+  const [instructionError, setInstructionError] = useState<string | null>(null);
+  const [instructionLoading, setInstructionLoading] = useState(false);
+  const [instructionHtml, setInstructionHtml] = useState<string | null>(null);
+  const [instructionReviews, setInstructionReviews] = useState<SectionReview[] | null>(null);
+  const [instructionOverallScore, setInstructionOverallScore] = useState<number | null>(null);
+  const [instructionRedFlags, setInstructionRedFlags] = useState<string | null>(null);
+  const [instructionDebug, setInstructionDebug] = useState<LlmDebugInfo | null>(null);
+
+  const resolveScoreClass = (score: string): string => {
+    const match = score.match(/([0-9]+(?:[.,][0-9]+)?)/);
+    if (!match) return "score-tone-neutral";
+    const value = Math.max(1, Math.min(10, parseFloat(match[1].replace(",", "."))));
+    const bucket = Math.round(value);
+    return `score-tone-${bucket}`;
+  };
 
   const handlePromptFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0] ?? null;
     event.target.value = "";
     setSelectedSpecFile(file);
+  };
+
+  const handleInstructionFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null;
+    event.target.value = "";
+    setInstructionFile(file);
   };
 
   const handlePromptAndFileSubmit = async () => {
@@ -117,6 +141,50 @@ export default function SpecificationPanel() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleInstructionSubmit = async () => {
+    if (!instructionFile || instructionLoading) {
+      if (!instructionFile) {
+        setInstructionError("Прикрепите файл с инструкциями");
+      }
+      return;
+    }
+
+    setInstructionLoading(true);
+    setInstructionError(null);
+    setInstructionHtml(null);
+    setInstructionReviews(null);
+    setInstructionOverallScore(null);
+    setInstructionRedFlags(null);
+    setInstructionDebug(null);
+    try {
+      const response = await uploadInstructionFile(instructionFile);
+      setInstructionHtml(response.html);
+      setInstructionReviews(response.reviews);
+      setInstructionOverallScore(response.overall_score ?? null);
+      setInstructionRedFlags(response.red_flags ?? null);
+      setInstructionDebug(response.debug ?? null);
+      setInstructionFile(null);
+    } catch (err) {
+      const description = err instanceof Error ? err.message : "Не удалось обработать файл";
+      setInstructionError(description);
+    } finally {
+      setInstructionLoading(false);
+    }
+  };
+
+  const downloadHtml = () => {
+    if (!instructionHtml) return;
+    const blob = new Blob([instructionHtml], { type: "text/html;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "sections_report.html";
+    document.body.append(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -199,6 +267,88 @@ export default function SpecificationPanel() {
             </article>
           ))
         )}
+      </div>
+      <div className="instruction-panel">
+        <h3>Формирование HTML-отчета по разделам</h3>
+        <p className="instruction-panel__hint">
+          Загрузите файл с инструкциями, сформированный внутренней обработкой. Документ будет
+          отправлен в ИИ, который вернет JSON с резюме, рисками и оценкой по каждому разделу. На
+          его основе соберется HTML-страница.
+        </p>
+        <div className="instruction-panel__controls">
+          <label className={`file-uploader${instructionLoading ? " file-uploader--disabled" : ""}`}>
+            <input
+              type="file"
+              accept=".txt,text/plain"
+              onChange={handleInstructionFileChange}
+              disabled={instructionLoading}
+            />
+            <span>
+              {instructionLoading
+                ? "Обработка файла..."
+                : instructionFile
+                ? `📎 Файл: ${instructionFile.name}`
+                : "📎 Прикрепить файл с инструкциями"}
+            </span>
+          </label>
+          <button
+            className="button instruction-panel__submit"
+            type="button"
+            onClick={handleInstructionSubmit}
+            disabled={instructionLoading || !instructionFile}
+          >
+            {instructionLoading ? "Отправка..." : "Сформировать HTML"}
+          </button>
+        </div>
+        {instructionError && <p className="panel__error">{instructionError}</p>}
+        {instructionReviews && instructionReviews.length > 0 ? (
+          <div className="instruction-panel__result">
+            <div className="instruction-panel__actions">
+              <button className="button" type="button" onClick={downloadHtml}>
+                Скачать HTML
+              </button>
+            </div>
+            {instructionOverallScore !== null ? (
+              <div className={`instruction-overall ${resolveScoreClass(String(instructionOverallScore))}`}>
+                Средняя оценка: {instructionOverallScore.toFixed(2)}
+              </div>
+            ) : null}
+            <div className="instruction-panel__cards">
+              {instructionReviews.map((review, index) => (
+                <article
+                  key={`${review.title}-${index}`}
+                  className={`instruction-card ${resolveScoreClass(review.score)}`}
+                >
+                  <header className="instruction-card__header">
+                    <h4 className="instruction-card__title">{review.title}</h4>
+                    <span className="instruction-card__score">Оценка: {review.score}</span>
+                  </header>
+                  <div className="instruction-card__block">
+                    <div className="instruction-card__label">Резюме</div>
+                    <p className="instruction-card__text">{review.resume || "(пусто)"}</p>
+                  </div>
+                  <div className="instruction-card__block">
+                    <div className="instruction-card__label">Риски</div>
+                    <p className="instruction-card__text">{review.risks || "(пусто)"}</p>
+                  </div>
+                </article>
+              ))}
+            </div>
+            {instructionRedFlags ? (
+              <div className="instruction-red-flags">
+                <div className="instruction-red-flags__title">RED_FLAGS</div>
+                <p className="instruction-red-flags__text">{instructionRedFlags}</p>
+              </div>
+            ) : null}
+            {instructionHtml ? (
+              <details className="instruction-panel__preview">
+                <summary>Показать HTML</summary>
+                <pre className="instruction-panel__code">{instructionHtml}</pre>
+              </details>
+            ) : null}
+            <DebugDetails debug={instructionDebug} />
+          </div>
+        ) : null}
       </div>
     </div>
   );

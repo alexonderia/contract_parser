@@ -23,6 +23,7 @@ services:
       # - OLLAMA_MODEL=qwen3:30b-a3b-instruct-2507-q4_K_M
       # - OLLAMA_MODEL=qwen2.5vl:32b
       - OLLAMA_MODEL=qwen3:14b
+  
     depends_on:
       - ollama
     ports:
