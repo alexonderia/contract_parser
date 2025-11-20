@@ -17,12 +17,12 @@ services:
       context: ./backend
     container_name: contract_parser_backend
     environment:
-      # - OLLAMA_BASE_URL=http://185.65.200.186:8080
-      - OLLAMA_BASE_URL=http://ollama:11434
-      - OLLAMA_MODEL=qwen2.5:1.5b
+      - OLLAMA_BASE_URL=http://192.168.3.3:11435
+      # - OLLAMA_BASE_URL=http://ollama:11434
+      # - OLLAMA_MODEL=qwen2.5:1.5b
       # - OLLAMA_MODEL=qwen3:30b-a3b-instruct-2507-q4_K_M
       # - OLLAMA_MODEL=qwen2.5vl:32b
-      # - OLLAMA_MODEL=qwen3:14b
+      - OLLAMA_MODEL=qwen3:14b
     depends_on:
       - ollama
     ports:
