@@ -145,3 +145,17 @@ class SectionReviewResponse(BaseModel):
     debug: LlmDebugInfo | None = Field(
         default=None, description="Отладочная информация с промптом и ответом"
     )
+
+
+class FullProcessingResponse(BaseModel):
+    overall_score: float | None = Field(
+        default=None, description="Средняя оценка по всем разделам"
+    )
+    inaccuracy: str | None = Field(
+        default=None, description="Ключевые неточности по документу"
+    )
+    red_flags: str | None = Field(
+        default=None, description="Серьезные ошибки по документу"
+    )
+    html: str = Field(..., description="HTML-страница со сводкой по разделам")
+    

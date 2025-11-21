@@ -21,6 +21,7 @@ from .schemas import (
     HealthResponse,
     LlmDebugInfo,
     DocumentSection,
+    FullProcessingResponse,
     SectionReviewResponse,
     SimpleChatRequest,
     SpecificationExtractionResponse,
@@ -401,5 +402,44 @@ async def specification_ai(
 async def specification_internal(file: UploadFile = File(...)) -> SpecificationExtractionResponse:
     return await _extract_internal_specification(file)
 
+@app.post("/api/sections/full", response_model=FullProcessingResponse)
+async def process_full_document(file: UploadFile = File(...)) -> FullProcessingResponse:
+    payload = await file.read()
+    spec_result = _extract_internal_specification_from_payload(file.filename or "", payload)
+
+    if not spec_result.combined_sections_text:
+        raise HTTPException(
+            status_code=422,
+            detail="Не удалось сформировать файл с разделами и инструкциями",
+        )
+
+    try:
+        (
+            _reviews,
+            overall_score,
+            inaccuracy,
+            red_flags,
+            html_report,
+            debug,
+        ) = await evaluate_section_file(spec_result.combined_sections_text)
+    except httpx.HTTPStatusError as exc:  # pragma: no cover - defensive logging
+        logger.error(
+            "Ollama returned HTTP %s while building full report: %s",
+            exc.response.status_code,
+            exc.response.text,
+        )
+        raise HTTPException(status_code=502, detail="Ollama вернула ошибку") from exc
+    except httpx.HTTPError as exc:  # pragma: no cover - defensive logging
+        logger.error("Error talking to Ollama during full processing: %s", exc)
+        raise HTTPException(status_code=502, detail="Не удалось подключиться к Ollama") from exc
+
+    _perform_debug_logging(debug)
+
+    return FullProcessingResponse(        
+        overall_score=overall_score,
+        inaccuracy=inaccuracy,
+        red_flags=red_flags,
+        html=html_report,
+    )
 
 __all__ = ["app"]

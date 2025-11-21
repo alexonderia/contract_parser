@@ -71,6 +71,14 @@ export interface SectionReviewResponse {
   debug?: LlmDebugInfo | null;
 }
 
+export interface FullProcessingResponse {
+  overall_score?: number | null;
+  inaccuracy?: string | null;
+  red_flags?: string | null;
+  html: string;
+  debug?: LlmDebugInfo | null;
+}
+
 export async function uploadSpecificationDocument(
   file: File,
   mode: SpecificationMode,
@@ -116,4 +124,24 @@ export async function uploadInstructionFile(
   }
 
   return (await response.json()) as SectionReviewResponse;
+}
+
+export async function processFullContract(
+  file: File,
+): Promise<FullProcessingResponse> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const response = await fetch(resolveApiUrl("/api/sections/full"), {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    const message = payload?.detail ?? payload?.error ?? "Не удалось обработать договор";
+    throw new Error(message);
+  }
+
+  return (await response.json()) as FullProcessingResponse;
 }

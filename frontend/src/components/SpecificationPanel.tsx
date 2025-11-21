@@ -2,12 +2,14 @@ import { type ChangeEvent, useState } from "react";
 import {
   uploadSpecificationDocument,
   uploadInstructionFile,
+  processFullContract,
   type SpecificationExtractionResponse,
   type SpecificationMode,
   type SpecificationResponse,
   type LlmDebugInfo,
   type DocumentSection,
   type SectionReview,
+  type FullProcessingResponse,
 } from "../api/specification";
 import SpecificationPreview from "./SpecificationPreview";
 import DebugDetails from "./DebugDetails";
@@ -70,6 +72,11 @@ export default function SpecificationPanel() {
   const [instructionRedFlags, setInstructionRedFlags] = useState<string | null>(null);
   const [instructionDebug, setInstructionDebug] = useState<LlmDebugInfo | null>(null);
 
+  const [fullProcessFile, setFullProcessFile] = useState<File | null>(null);
+  const [fullProcessError, setFullProcessError] = useState<string | null>(null);
+  const [fullProcessLoading, setFullProcessLoading] = useState(false);
+  const [fullProcessResult, setFullProcessResult] = useState<FullProcessingResponse | null>(null);
+
   const resolveScoreClass = (score: string): string => {
     const match = score.match(/([0-9]+(?:[.,][0-9]+)?)/);
     if (!match) return "score-tone-neutral";
@@ -88,6 +95,12 @@ export default function SpecificationPanel() {
     const file = event.target.files?.[0] ?? null;
     event.target.value = "";
     setInstructionFile(file);
+  };
+
+  const handleFullProcessFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null;
+    event.target.value = "";
+    setFullProcessFile(file);
   };
 
   const handlePromptAndFileSubmit = async () => {
@@ -174,17 +187,42 @@ export default function SpecificationPanel() {
     }
   };
 
-  const downloadHtml = () => {
-    if (!instructionHtml) return;
-    const blob = new Blob([instructionHtml], { type: "text/html;charset=utf-8" });
+  const downloadHtml = (html: string | null, filename = "sections_report.html") => {
+    if (!html) return;
+    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = "sections_report.html";
+    link.download = filename;
     document.body.append(link);
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
+  };
+
+
+
+  const handleFullProcessSubmit = async () => {
+    if (!fullProcessFile || fullProcessLoading) {
+      if (!fullProcessFile) {
+        setFullProcessError("Прикрепите файл договора");
+      }
+      return;
+    }
+
+    setFullProcessLoading(true);
+    setFullProcessError(null);
+    setFullProcessResult(null);
+    try {
+      const result = await processFullContract(fullProcessFile);
+      setFullProcessResult(result);
+      setFullProcessFile(null);
+    } catch (err) {
+      const description = err instanceof Error ? err.message : "Не удалось обработать договор";
+      setFullProcessError(description);
+    } finally {
+      setFullProcessLoading(false);
+    }
   };
 
   return (
@@ -269,6 +307,69 @@ export default function SpecificationPanel() {
         )}
       </div>
       <div className="instruction-panel">
+        <h3>Полная обработка договора</h3>
+        <p className="instruction-panel__hint">
+          Загрузите договор в формате DOCX, TXT или MD. Сервис выделит разделы, соберет файл с
+          инструкциями и отправит его в ИИ для получения HTML-отчета по разделам.
+        </p>
+        <div className="instruction-panel__controls">
+          <label className={`file-uploader${fullProcessLoading ? " file-uploader--disabled" : ""}`}>
+            <input
+              type="file"
+              accept=".docx,.txt,.md,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
+              onChange={handleFullProcessFileChange}
+              disabled={fullProcessLoading}
+            />
+            <span>
+              {fullProcessLoading
+                ? "Обработка файла..."
+                : fullProcessFile
+                ? `📎 Файл: ${fullProcessFile.name}`
+                : "📎 Прикрепить договор"}
+            </span>
+          </label>
+          <button
+            className="button instruction-panel__submit"
+            type="button"
+            onClick={handleFullProcessSubmit}
+            disabled={fullProcessLoading || !fullProcessFile}
+          >
+            {fullProcessLoading ? "Отправка..." : "Запустить полный цикл"}
+          </button>
+        </div>
+        {fullProcessError && <p className="panel__error">{fullProcessError}</p>}
+        {fullProcessResult ? (
+          <div className="instruction-panel__result">
+            <div className="instruction-panel__actions">
+              <button
+                className="button"
+                type="button"
+                onClick={() => downloadHtml(fullProcessResult.html, "full_sections_report.html")}
+              >
+                Скачать HTML
+              </button>
+            </div>
+            {fullProcessResult.overall_score !== undefined && fullProcessResult.overall_score !== null ? (
+              <div className={`instruction-overall ${resolveScoreClass(String(fullProcessResult.overall_score))}`}>
+                Средняя оценка: {fullProcessResult.overall_score.toFixed(2)}
+              </div>
+            ) : null}
+            {fullProcessResult.inaccuracy ? (
+              <div className="instruction-panel__block">
+                <div className="instruction-card__label">Неточности</div>
+                <p className="instruction-card__text">{fullProcessResult.inaccuracy}</p>
+              </div>
+            ) : null}
+            {fullProcessResult.red_flags ? (
+              <div className="instruction-red-flags">
+                <div className="instruction-red-flags__title">RED_FLAGS</div>
+                <p className="instruction-red-flags__text">{fullProcessResult.red_flags}</p>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+      <div className="instruction-panel">
         <h3>Формирование HTML-отчета по разделам</h3>
         <p className="instruction-panel__hint">
           Загрузите файл с инструкциями, сформированный внутренней обработкой. Документ будет
@@ -304,7 +405,11 @@ export default function SpecificationPanel() {
         {instructionReviews && instructionReviews.length > 0 ? (
           <div className="instruction-panel__result">
             <div className="instruction-panel__actions">
-              <button className="button" type="button" onClick={downloadHtml}>
+              <button
+                className="button"
+                type="button"
+                onClick={() => downloadHtml(instructionHtml)}
+              >
                 Скачать HTML
               </button>
             </div>
