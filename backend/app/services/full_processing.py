@@ -6,7 +6,7 @@ import re
 from pathlib import Path
 from typing import Iterable
 
-from .schemas import SpecificationResponse, SpecificationTable
+from ..schemas import SpecificationResponse, SpecificationTable
 
 _DEFAULT_EXPORT_DIR = Path(__file__).resolve().parent / "exports"
 

@@ -5,8 +5,8 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from .document_models import Block
-from .document_processing import blocks_to_prompt_lines_with_mapping
+from ..document.models import Block
+from ..document.reader import blocks_to_prompt_lines_with_mapping
 
 _SECTION_HEADING_RE = re.compile(r"^(?P<number>\d{1,2})\.\s(?P<title>.+)")
 _SECTION_BREAK_RE = re.compile(r"Приложение № 1")

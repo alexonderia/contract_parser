@@ -20,19 +20,17 @@ show the raw prompt and the unmodified LLM reply.
 
 ## Module layout
 
-- `document_models.py` — shared data structures representing document blocks.
-- `document_processing.py` — helper functions that turn DOCX/TXT files into
-  normalised blocks or plain text lines for prompting.
-- `document_parser.py` — rule-based detector that locates specification tables
-  inside the parsed document.
-- `specification_builder.py` — converts the parser result into Pydantic
-  responses.
-- `neural_specification.py` — prepares prompts for the LLM, validates its JSON
-  response and emits debug metadata.
-- `llm_utils.py` — utilities for extracting the textual answer from the LLM and
-  assembling debug payloads.
-- `ollama.py` — asynchronous HTTP client used by the backend.
-- `main.py` — FastAPI application with middleware and endpoint wiring.
+- `api/` — domain-specific routers for chat, specification extraction, section
+  review, and health checks.
+- `core/` — application settings, logging bootstrap, and shared exceptions.
+- `document/` — shared document models, readers, utils, and the specification
+  extractor used by internal flows.
+- `services/` — higher-level business logic including LLM-based specification
+  detection, section reviews, and export helpers.
+- `llm/` — Ollama client wrapper, response utilities, and prompt assets.
+- `schemas/` — Pydantic models grouped by domain (chat, sections,
+  specification, and shared types).
+- `main.py` — FastAPI application with middleware and router wiring.
 
 ## Debug payloads
 

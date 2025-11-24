@@ -1,0 +1,1 @@
+You analyze contract documents and locate the "Спецификация" section, identifying headings and table ranges.

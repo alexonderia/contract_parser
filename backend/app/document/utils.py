@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 
-from .document_models import Block
+from .models import Block
 
 _HEADER_KEYWORDS = [
     "наименован",

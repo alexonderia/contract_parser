@@ -1,27 +1,24 @@
 from __future__ import annotations
 
-import os
 from typing import Any, Iterable
 
 import httpx
 
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434").rstrip("/")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:1.5b")
-OLLAMA_TIMEOUT = float(os.getenv("OLLAMA_TIMEOUT", "600"))
-
+from ..core import get_settings
 
 class OllamaClient:
     """Минимальный клиент для обращения к Ollama."""
 
     def __init__(
         self,
-        base_url: str = OLLAMA_BASE_URL,
-        model: str = OLLAMA_MODEL,
-        timeout: float = OLLAMA_TIMEOUT,
+        base_url: str | None = None,
+        model: str | None = None,
+        timeout: float | None = None,
     ) -> None:
-        self.base_url = base_url.rstrip("/")
-        self.model = model
-        self.timeout = timeout
+        cfg = get_settings()
+        self.base_url = (base_url or cfg.ollama_base_url).rstrip("/")
+        self.model = model or cfg.ollama_model
+        self.timeout = timeout or cfg.ollama_timeout
 
     async def chat(self, messages: Iterable[dict[str, str]]) -> dict[str, Any]:
         payload = {

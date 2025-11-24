@@ -8,16 +8,16 @@ from collections import defaultdict
 from typing import Any
 from string import Template
 
-from .document_models import Block
-from .document_processing import (
-    blocks_to_prompt_lines_with_mapping,
-    load_blocks,
+from ..document.models import Block
+from ..document.reader import blocks_to_prompt_lines_with_mapping, load_blocks
+from ..document.utils import is_specification_table, table_has_goods
+from ..llm import build_debug_info, client, extract_reply
+from ..schemas import (
+    LlmDebugInfo,
+    SpecificationAnchor,
+    SpecificationResponse,
+    SpecificationTable,
 )
-from .llm_utils import build_debug_info, extract_reply
-from .ollama import client
-from .schemas import LlmDebugInfo, SpecificationAnchor, SpecificationResponse, SpecificationTable
-from .specification_utils import is_specification_table, table_has_goods
-
 logger = logging.getLogger("contract_parser.backend.neural_spec")
 
 _SYSTEM_PROMPT = """Вы анализируете контракты и находите разделы со спецификациями."""

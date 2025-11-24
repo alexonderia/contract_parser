@@ -1,10 +1,9 @@
 """Helpers for converting parser results into API schemas."""
 from __future__ import annotations
 
-from .document_models import Block
-from .document_parser import SpecificationResult, TableRegion
-from .schemas import SpecificationAnchor, SpecificationResponse, SpecificationTable
-
+from ..document.models import Block
+from ..document.spec_extractor import SpecificationResult, TableRegion
+from ..schemas import SpecificationAnchor, SpecificationResponse, SpecificationTable
 
 def _block_preview(block: Block) -> str:
     if block.type == "table":

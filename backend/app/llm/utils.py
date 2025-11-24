@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from .schemas import LlmDebugInfo
+from ..schemas import LlmDebugInfo
 
 
 def extract_reply(data: dict[str, Any]) -> str:

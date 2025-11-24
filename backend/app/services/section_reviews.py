@@ -9,9 +9,8 @@ from typing import Iterable
 
 import httpx
 
-from .llm_utils import build_debug_info, extract_reply
-from .ollama import client
-from .schemas import LlmDebugInfo, SectionReview
+from ..llm import build_debug_info, client, extract_reply
+from ..schemas import LlmDebugInfo, SectionReview
 
 
 def _parse_titles(source: str) -> list[str]:
@@ -354,6 +353,7 @@ async def evaluate_section_file(
         "который выводит только ошибку по общей сумме, если она разная на протяжении документа, и ошибку по Сторонам (Покупатель и Поставщик)"
         "если они разные на протяжении документа, в противном случае оставь данный пункт пустым." 
         "Внимание: RED_FLAGS заполнять только если есть ошибки! Если ошибок нет, оставить пустым. Если есть любые другие замечания, кроме суммы и сторон - игнорируй их."
+        "Возвращай только json, без дополнительных обозначений типа ```json```"
     )
     messages = [
         {"role": "system", "content": system_prompt},

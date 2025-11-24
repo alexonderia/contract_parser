@@ -5,9 +5,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from .document_models import Block
-from .document_processing import load_blocks
-from .specification_utils import is_specification_table
+from ..core import UnsupportedDocumentError
+from .models import Block
+from .reader import load_blocks
+from .utils import is_specification_table
 
 BlockType = Literal["paragraph", "table"]
 

@@ -14,7 +14,7 @@ from docx.oxml.text.paragraph import CT_P
 from docx.table import Table
 from docx.text.paragraph import Paragraph
 
-from .document_models import Block
+from .models import Block
 
 Parser = Callable[[bytes], list[Block]]
 
