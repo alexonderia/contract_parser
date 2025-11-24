@@ -44,7 +44,7 @@ function formatSpecificationReply(
   const firstAnchor = result.start_anchor;
   parts.push(
     `Начало: блок #${firstAnchor.index + 1} (${firstAnchor.type}). ` +
-      `Конец: блок #${result.end_anchor.index + 1} (${result.end_anchor.type}).`,
+    `Конец: блок #${result.end_anchor.index + 1} (${result.end_anchor.type}).`,
   );
 
   if (sections && sections.length > 0) {
@@ -262,8 +262,8 @@ export default function SpecificationPanel() {
             {isLoading
               ? "Обработка файла..."
               : selectedSpecFile
-              ? `📎 Файл: ${selectedSpecFile.name}`
-              : "📎 Прикрепить документ"}
+                ? `📎 Файл: ${selectedSpecFile.name}`
+                : "📎 Прикрепить документ"}
           </span>
         </label>
         <button
@@ -324,8 +324,8 @@ export default function SpecificationPanel() {
               {fullProcessLoading
                 ? "Обработка файла..."
                 : fullProcessFile
-                ? `📎 Файл: ${fullProcessFile.name}`
-                : "📎 Прикрепить договор"}
+                  ? `📎 Файл: ${fullProcessFile.name}`
+                  : "📎 Прикрепить договор"}
             </span>
           </label>
           <button
@@ -348,6 +348,16 @@ export default function SpecificationPanel() {
               >
                 Скачать HTML
               </button>
+              <button
+                className="button"
+                type="button"
+                onClick={() =>
+                  downloadHtml(fullProcessResult.docx_text ?? null, "document_text.html")
+                }
+              >
+                Скачать текст документа
+              </button>
+
             </div>
             {fullProcessResult.overall_score !== undefined && fullProcessResult.overall_score !== null ? (
               <div className={`instruction-overall ${resolveScoreClass(String(fullProcessResult.overall_score))}`}>
@@ -388,8 +398,8 @@ export default function SpecificationPanel() {
               {instructionLoading
                 ? "Обработка файла..."
                 : instructionFile
-                ? `📎 Файл: ${instructionFile.name}`
-                : "📎 Прикрепить файл с инструкциями"}
+                  ? `📎 Файл: ${instructionFile.name}`
+                  : "📎 Прикрепить файл с инструкциями"}
             </span>
           </label>
           <button

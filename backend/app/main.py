@@ -11,7 +11,7 @@ from .document_parser import (
     UnsupportedDocumentError,
     extract_specification_from_blocks,
 )
-from .document_processing import load_blocks
+from .document_processing import blocks_to_html, load_blocks
 from .llm_utils import build_debug_info, extract_reply
 from .neural_specification import detect_specification
 from .ollama import client
@@ -405,7 +405,18 @@ async def specification_internal(file: UploadFile = File(...)) -> SpecificationE
 @app.post("/api/sections/full", response_model=FullProcessingResponse)
 async def process_full_document(file: UploadFile = File(...)) -> FullProcessingResponse:
     payload = await file.read()
+    blocks = load_blocks(file.filename or "", payload)
+    docx_text = blocks_to_html(blocks)
     spec_result = _extract_internal_specification_from_payload(file.filename or "", payload)
+
+    specification_text = None
+    if spec_result.exported_json_base64:
+        try:
+            specification_text = base64.b64decode(spec_result.exported_json_base64).decode("utf-8")
+        except UnicodeDecodeError:  # pragma: no cover - fallback for unexpected encodings
+            specification_text = base64.b64decode(spec_result.exported_json_base64).decode(
+                "utf-8", errors="replace"
+            )
 
     if not spec_result.combined_sections_text:
         raise HTTPException(
@@ -415,13 +426,16 @@ async def process_full_document(file: UploadFile = File(...)) -> FullProcessingR
 
     try:
         (
-            _reviews,
+            reviews,
             overall_score,
             inaccuracy,
             red_flags,
             html_report,
             debug,
-        ) = await evaluate_section_file(spec_result.combined_sections_text)
+        ) = await evaluate_section_file(
+            spec_result.combined_sections_text,
+            docx_text,
+        )
     except httpx.HTTPStatusError as exc:  # pragma: no cover - defensive logging
         logger.error(
             "Ollama returned HTTP %s while building full report: %s",
@@ -435,7 +449,9 @@ async def process_full_document(file: UploadFile = File(...)) -> FullProcessingR
 
     _perform_debug_logging(debug)
 
-    return FullProcessingResponse(        
+    return FullProcessingResponse(
+        docx_text=docx_text,
+        specification_text=specification_text,
         overall_score=overall_score,
         inaccuracy=inaccuracy,
         red_flags=red_flags,

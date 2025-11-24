@@ -72,6 +72,8 @@ export interface SectionReviewResponse {
 }
 
 export interface FullProcessingResponse {
+  specification_text?: string | null;
+  docx_text?: string | null;
   overall_score?: number | null;
   inaccuracy?: string | null;
   red_flags?: string | null;

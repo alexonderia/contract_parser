@@ -155,6 +155,7 @@ def _build_html_report(
     overall_score: float | None,
     inaccuracy: str | None,
     red_flags: str | None,
+    document_html: str | None = None,
 ) -> str:
     cards = []
     for review in reviews:
@@ -196,6 +197,15 @@ def _build_html_report(
         </section>
         """
 
+    document_section = ""
+    if document_html:
+        document_section = f"""
+        <details class=\"document-panel\">
+            <summary>Текст документа</summary>
+            <div class=\"document-panel__content\">{document_html}</div>
+        </details>
+        """
+
     overall_display = (
         f"{overall_score:.2f}" if overall_score is not None else "нет данных"
     )
@@ -229,6 +239,42 @@ def _build_html_report(
             margin-bottom: 20px;
             font-weight: 700;
             font-size: 18px;
+        }}
+        .document-panel {{
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 12px 16px;
+            margin: 12px 0 20px;
+            background: #fff;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+        }}
+        .document-panel summary {{
+            cursor: pointer;
+            font-weight: 700;
+            outline: none;
+        }}
+        .document-panel__content {{
+            margin-top: 12px;
+            max-height: 420px;
+            overflow: auto;
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid #e5e7eb;
+            background: #f9fafb;
+        }}
+        .document-panel__content p {{
+            margin: 0 0 10px;
+            line-height: 1.5;
+        }}
+        .document-panel__content table {{
+            border-collapse: collapse;
+            width: 100%;
+            margin-bottom: 10px;
+            background: #fff;
+        }}
+        .document-panel__content td {{
+            border: 1px solid #d1d5db;
+            padding: 6px 8px;
         }}
         .section-card {{
             border: 1px solid #e5e7eb;
@@ -283,6 +329,7 @@ def _build_html_report(
     <div class=\"layout\">
         <h1>Отчет по оценке разделов</h1>
         <div class=\"overall-score\">Средняя оценка: {overall_display}</div>
+        {document_section}
         {cards_html}
         {inaccuracy_block}
         {red_flags_block}
@@ -294,6 +341,7 @@ def _build_html_report(
 
 async def evaluate_section_file(
     content: str,
+    document_html: str | None = None,
 ) -> tuple[list[SectionReview], float | None, str | None, str, LlmDebugInfo | None]:
     """Send the combined instruction file to LLM and build an HTML report."""
 
@@ -323,7 +371,13 @@ async def evaluate_section_file(
         raw_items = [{} for _ in titles]
     reviews = _normalize_reviews(raw_items, titles)
     average_score = _calculate_average_score(reviews)
-    html_report = _build_html_report(reviews, average_score, inaccuracy, red_flags)
+    html_report = _build_html_report(
+        reviews,
+        average_score,
+        inaccuracy,
+        red_flags,
+        document_html,
+    )
     return reviews, average_score, inaccuracy, red_flags, html_report, debug
 
 

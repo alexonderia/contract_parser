@@ -4,6 +4,7 @@ from __future__ import annotations
 from io import BytesIO
 from pathlib import Path
 from typing import Callable, Iterable
+import html
 import re
 
 from docx import Document
@@ -167,9 +168,27 @@ def blocks_to_prompt_lines(blocks: list[Block]) -> list[str]:
     lines, _ = blocks_to_prompt_lines_with_mapping(blocks)
     return lines
 
+def blocks_to_html(blocks: list[Block]) -> str:
+    """Convert parsed document blocks to a simple HTML representation."""
+
+    parts: list[str] = []
+    for block in blocks:
+        if block.type == "paragraph":
+            parts.append(f"<p>{html.escape(block.text)}</p>")
+        elif block.type == "table":
+            rows_html = []
+            for row in block.rows or []:
+                cells_html = "".join(
+                    f"<td>{html.escape(cell)}</td>" for cell in row
+                )
+                rows_html.append(f"<tr>{cells_html}</tr>")
+            if rows_html:
+                parts.append(f"<table>{''.join(rows_html)}</table>")
+    return "\n".join(parts)
 
 __all__ = [
     "Block",
+    "blocks_to_html",
     "blocks_to_prompt_lines",
     "blocks_to_prompt_lines_with_mapping",
     "load_blocks",

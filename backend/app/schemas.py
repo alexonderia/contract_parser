@@ -148,6 +148,12 @@ class SectionReviewResponse(BaseModel):
 
 
 class FullProcessingResponse(BaseModel):
+    docx_text: str | None = Field(
+        default=None, description="Полный текст документа в формате HTML"
+    )
+    specification_text: str | None = Field(
+        default=None, description="Полный текст спецификации в формате JSON"
+    )
     overall_score: float | None = Field(
         default=None, description="Средняя оценка по всем разделам"
     )
