@@ -20,9 +20,14 @@ class OllamaClient:
         self.model = model or cfg.ollama_model
         self.timeout = timeout or cfg.ollama_timeout
 
-    async def chat(self, messages: Iterable[dict[str, str]]) -> dict[str, Any]:
+    async def chat(
+        self,
+        messages: Iterable[dict[str, str]],
+        *,
+        model: str | None = None,
+    ) -> dict[str, Any]:
         payload = {
-            "model": self.model,
+            "model": model or self.model,
             "messages": list(messages),
             "stream": False,
             "options": {

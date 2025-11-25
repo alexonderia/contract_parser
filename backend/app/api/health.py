@@ -21,7 +21,7 @@ async def health() -> HealthResponse:
         models = tags.get("models", []) if isinstance(tags, dict) else []
         for item in models:
             name = item.get("name") or item.get("model")
-            if name == cfg.ollama_model:
+            if name == client.model:
                 model_available = True
                 break
     except httpx.HTTPError:  # pragma: no cover - defensive logging
@@ -29,7 +29,7 @@ async def health() -> HealthResponse:
 
     return HealthResponse(
         status="ok",
-        model=cfg.ollama_model,
+        model=client.model,
         ollama=cfg.ollama_base_url,
         model_available=model_available,
     )

@@ -3,7 +3,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import httpx
-from fastapi import APIRouter, File, Form, HTTPException, Path, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Path, Query, UploadFile
 
 from .deps import log_debug_info, read_upload_payload
 from ..core import UnsupportedDocumentError
@@ -166,6 +166,10 @@ async def specification_internal(file: UploadFile = File(...)) -> SpecificationE
 async def process_full_document(
     key: str = Path(...),
     file: UploadFile = File(...),    
+    force: bool = Query(
+        default=False,
+        description="Принудительно пересоздать отчет, не используя кэшированные файлы",
+    ),
 ) -> FullProcessingResponse:
     """Generate a complete instruction review report based on the uploaded document."""
 
@@ -179,7 +183,7 @@ async def process_full_document(
     docx_text = blocks_to_html(blocks)
     sections_filename = f"{file_hash}.json"
     
-    cached_export = import_sections_with_specification(filename_hash=file_hash)
+    cached_export = None if force else import_sections_with_specification(filename_hash=file_hash)
     if cached_export is not None:
         cached_sections, cached_specification, cached_payload_text = cached_export
         combined_sections_text = build_sections_instruction(
@@ -234,9 +238,13 @@ async def process_full_document(
         if exported_sections:
             sections_filename = exported_sections.name
 
-    cached_report = fetch_cached_report_html(file_hash=file_hash)
+    cached_report = None if force else fetch_cached_report_html(file_hash=file_hash)
     if cached_report:
         html_report, entry = cached_report
+        debug_message = (
+            f"Получен отчет документа \"{entry.source_filename or filename}\" от "
+            f"\"{entry.last_checked_at}\""
+        )
         return FullProcessingResponse(
             overall_score=entry.overall_score,
             inaccuracy=entry.inaccuracy,
@@ -244,6 +252,7 @@ async def process_full_document(
             html=html_report,
             specification_text=specification_text,
             docx_text=docx_text,
+            debug_message=debug_message,
         )
     try:
         (
@@ -272,7 +281,7 @@ async def process_full_document(
         report_path = None
 
     if report_path:
-        record_report_generation(
+        entry = record_report_generation(
             file_hash=file_hash,
             sections_filename=sections_filename,
             source_filename=filename,
@@ -280,6 +289,15 @@ async def process_full_document(
             overall_score=overall_score,
             inaccuracy=inaccuracy,
             red_flags=red_flags,
+        )
+    else:
+        entry = None
+
+    debug_message = None
+    if entry:
+        debug_message = (
+            f"Получен отчет документа \"{entry.source_filename or filename}\" от "
+            f"\"{entry.last_checked_at}\""
         )
 
     return FullProcessingResponse(
@@ -289,4 +307,5 @@ async def process_full_document(
         html=html_report,
         specification_text=specification_text,
         docx_text=docx_text,
+        debug_message=debug_message,
     )

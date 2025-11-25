@@ -3,7 +3,13 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .api import chat_router, health_router, sections_router, specification_router
+from .api import (
+    chat_router,
+    health_router,
+    models_router,
+    sections_router,
+    specification_router,
+)
 from .core import configure_logging, get_settings
 
 logger = configure_logging()
@@ -21,4 +27,5 @@ app.add_middleware(
 app.include_router(chat_router)
 app.include_router(specification_router)
 app.include_router(sections_router)
+app.include_router(models_router)
 app.include_router(health_router)

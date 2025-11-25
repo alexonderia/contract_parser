@@ -204,7 +204,7 @@ export default function SpecificationPanel() {
 
 
 
-  const handleFullProcessSubmit = async () => {
+  const handleFullProcessSubmit = async (force = false) => {
     if (!fullProcessFile || fullProcessLoading) {
       if (!fullProcessFile) {
         setFullProcessError("Прикрепите файл договора");
@@ -216,7 +216,7 @@ export default function SpecificationPanel() {
     setFullProcessError(null);
     setFullProcessResult(null);
     try {
-      const result = await processFullContract(fullProcessFile, fullProcessRole);
+      const result = await processFullContract(fullProcessFile, fullProcessRole, force);
       setFullProcessResult(result);
       setFullProcessFile(null);
     } catch (err) {
@@ -314,8 +314,7 @@ export default function SpecificationPanel() {
           Загрузите договор в формате DOCX, TXT или MD. Сервис выделит разделы, соберет файл с
           инструкциями и отправит его в ИИ для получения HTML-отчета по разделам.
         </p>
-        <div className="instruction-panel__controls">
-          <label className="instruction-panel__select">
+        <label className="instruction-panel__select">
             <span>Сторона обработки:</span>
             <select
               value={fullProcessRole}
@@ -327,6 +326,8 @@ export default function SpecificationPanel() {
               <option value="accountant">Бухгалтер</option>
             </select>
           </label>
+        <div className="instruction-panel__controls">
+          
           <label className={`file-uploader${fullProcessLoading ? " file-uploader--disabled" : ""}`}>
             <input
               type="file"
@@ -345,10 +346,18 @@ export default function SpecificationPanel() {
           <button
             className="button instruction-panel__submit"
             type="button"
-            onClick={handleFullProcessSubmit}
+            onClick={() => handleFullProcessSubmit()}
             disabled={fullProcessLoading || !fullProcessFile}
           >
             {fullProcessLoading ? "Отправка..." : "Запустить полный цикл"}
+          </button>
+          <button
+            className="button instruction-panel__submit"
+            type="button"
+            onClick={() => handleFullProcessSubmit(true)}
+            disabled={fullProcessLoading || !fullProcessFile}
+          >
+            {fullProcessLoading ? "Отправка..." : "Перезаписать"}
           </button>
         </div>
         {fullProcessError && <p className="panel__error">{fullProcessError}</p>}
@@ -373,6 +382,11 @@ export default function SpecificationPanel() {
               </button>
 
             </div>
+            {fullProcessResult.debug_message ? (
+              <p className="instruction-panel__hint instruction-panel__debug">
+                {fullProcessResult.debug_message}
+              </p>
+            ) : null}
             {fullProcessResult.overall_score !== undefined && fullProcessResult.overall_score !== null ? (
               <div className={`instruction-overall ${resolveScoreClass(String(fullProcessResult.overall_score))}`}>
                 Средняя оценка: {fullProcessResult.overall_score.toFixed(2)}

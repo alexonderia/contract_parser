@@ -79,6 +79,7 @@ export interface FullProcessingResponse {
   red_flags?: string | null;
   html: string;
   debug?: LlmDebugInfo | null;
+  debug_message?: string | null;
 }
 
 export type FullProcessingKey = "lawyer" | "economist" | "accountant";
@@ -133,12 +134,14 @@ export async function uploadInstructionFile(
 export async function processFullContract(
   file: File,
   role: FullProcessingKey,
+  force = false,
 ): Promise<FullProcessingResponse> {
   const formData = new FormData();
   formData.append("file", file);
   formData.append("key", role);
 
-  const response = await fetch(resolveApiUrl(`/api/sections/full:${role}`), {
+  const forceSuffix = force ? "?force=true" : "";
+  const response = await fetch(resolveApiUrl(`/api/sections/full:${role}${forceSuffix}`), {
     method: "POST",
     body: formData,
   });

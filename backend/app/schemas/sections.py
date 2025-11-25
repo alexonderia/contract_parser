@@ -57,4 +57,8 @@ class FullProcessingResponse(BaseModel):
         default=None, description="Серьезные ошибки по документу"
     )
     html: str = Field(..., description="HTML-страница со сводкой по разделам")
+    debug_message: str | None = Field(
+        default=None,
+        description="Отладочная информация о последнем полученном отчете",
+    )
     

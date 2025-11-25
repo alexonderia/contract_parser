@@ -1,5 +1,5 @@
 from .chat import ChatHistoryMessage, ChatRequest, ChatResponse, SimpleChatRequest
-from .common import HealthResponse, LlmDebugInfo
+from .common import HealthResponse, LlmDebugInfo, ModelListResponse, ModelSelectRequest
 from .sections import (
     DocumentSection,
     FullProcessingResponse,
@@ -21,6 +21,8 @@ __all__ = [
     "SimpleChatRequest",
     "HealthResponse",
     "LlmDebugInfo",
+    "ModelListResponse",
+    "ModelSelectRequest",
     "DocumentSection",
     "FullProcessingResponse",
     "SectionReview",

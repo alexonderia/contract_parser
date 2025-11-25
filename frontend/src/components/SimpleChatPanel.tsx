@@ -29,7 +29,7 @@ type ChatMessage = ChatTextMessage | ChatDualMessage;
 const welcomeMessage: ChatMessage = {
   kind: "text",
   role: "assistant",
-  content: "Здравствуйте! Это простое окно чата для вопросов к модели Qwen2.5.",
+  content: "Здравствуйте! Это простое окно чата для вопросов.",
 };
 
 export default function SimpleChatPanel() {
