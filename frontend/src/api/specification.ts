@@ -81,6 +81,8 @@ export interface FullProcessingResponse {
   debug?: LlmDebugInfo | null;
 }
 
+export type FullProcessingKey = "lawyer" | "economist" | "accountant";
+
 export async function uploadSpecificationDocument(
   file: File,
   mode: SpecificationMode,
@@ -130,11 +132,13 @@ export async function uploadInstructionFile(
 
 export async function processFullContract(
   file: File,
+  role: FullProcessingKey,
 ): Promise<FullProcessingResponse> {
   const formData = new FormData();
   formData.append("file", file);
+  formData.append("key", role);
 
-  const response = await fetch(resolveApiUrl("/api/sections/full"), {
+  const response = await fetch(resolveApiUrl(`/api/sections/full:${role}`), {
     method: "POST",
     body: formData,
   });

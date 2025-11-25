@@ -26,7 +26,8 @@ class OllamaClient:
             "messages": list(messages),
             "stream": False,
             "options": {
-                "temperature": 0 # дефолт
+                "temperature": 0, # дефолт
+                "seed": 123,
             }
         }
         async with httpx.AsyncClient(timeout=self.timeout) as client:

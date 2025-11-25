@@ -10,6 +10,7 @@ import {
   type DocumentSection,
   type SectionReview,
   type FullProcessingResponse,
+  type FullProcessingKey,
 } from "../api/specification";
 import SpecificationPreview from "./SpecificationPreview";
 import DebugDetails from "./DebugDetails";
@@ -76,6 +77,7 @@ export default function SpecificationPanel() {
   const [fullProcessError, setFullProcessError] = useState<string | null>(null);
   const [fullProcessLoading, setFullProcessLoading] = useState(false);
   const [fullProcessResult, setFullProcessResult] = useState<FullProcessingResponse | null>(null);
+  const [fullProcessRole, setFullProcessRole] = useState<FullProcessingKey>("lawyer");
 
   const resolveScoreClass = (score: string): string => {
     const match = score.match(/([0-9]+(?:[.,][0-9]+)?)/);
@@ -214,7 +216,7 @@ export default function SpecificationPanel() {
     setFullProcessError(null);
     setFullProcessResult(null);
     try {
-      const result = await processFullContract(fullProcessFile);
+      const result = await processFullContract(fullProcessFile, fullProcessRole);
       setFullProcessResult(result);
       setFullProcessFile(null);
     } catch (err) {
@@ -313,6 +315,18 @@ export default function SpecificationPanel() {
           инструкциями и отправит его в ИИ для получения HTML-отчета по разделам.
         </p>
         <div className="instruction-panel__controls">
+          <label className="instruction-panel__select">
+            <span>Сторона обработки:</span>
+            <select
+              value={fullProcessRole}
+              onChange={(event) => setFullProcessRole(event.target.value as FullProcessingKey)}
+              disabled={fullProcessLoading}
+            >
+              <option value="lawyer">Юрист</option>
+              <option value="economist">Экономист</option>
+              <option value="accountant">Бухгалтер</option>
+            </select>
+          </label>
           <label className={`file-uploader${fullProcessLoading ? " file-uploader--disabled" : ""}`}>
             <input
               type="file"

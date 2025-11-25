@@ -1,12 +1,15 @@
 """Utilities for slicing documents into numbered contract sections."""
 from __future__ import annotations
 
+import json
+import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
 
 from ..document.models import Block
 from ..document.reader import blocks_to_prompt_lines_with_mapping
+from ..schemas import DocumentSection, SpecificationResponse
 
 _SECTION_HEADING_RE = re.compile(r"^(?P<number>\d{1,2})\.\s(?P<title>.+)")
 _SECTION_BREAK_RE = re.compile(r"Приложение № 1")
@@ -124,8 +127,7 @@ def export_sections_to_txt(
     if not sections:
         return []
 
-    base_directory = Path(export_dir or Path(__file__).resolve().parent / "exports")
-    base_directory.mkdir(parents=True, exist_ok=True)
+    base_directory = _resolve_export_dir(export_dir)
 
     stem = Path(source_filename or "document").stem or "document"
     sanitized_stem = _sanitize(stem)
@@ -167,7 +169,7 @@ def build_sections_instruction(
         instruction_text = _load_instruction_text(16)
         if instruction_text:
             parts.append(instruction_text)
-        # parts.append("Спецификация:")
+        parts.append("TITLE: Приложение №1 Спецификация:")
         parts.append(specification_text)
 
     return "\n".join(parts).rstrip()
@@ -185,8 +187,7 @@ def export_sections_bundle(
     if not sections:
         return None
 
-    base_directory = Path(export_dir or Path(__file__).resolve().parent / "exports")
-    base_directory.mkdir(parents=True, exist_ok=True)
+    base_directory = _resolve_export_dir(export_dir)
 
     stem = Path(source_filename or "document").stem or "document"
     sanitized_stem = _sanitize(stem)
@@ -196,11 +197,110 @@ def export_sections_bundle(
 
     return target, content
 
+def _resolve_export_dir(export_dir: Path | None) -> Path:
+    base_directory = Path(
+        export_dir
+        or os.getenv("SECTIONS_EXPORT_DIR")
+        or Path(__file__).resolve().parent / "exports"
+    )
+    base_directory.mkdir(parents=True, exist_ok=True)
+    return base_directory
+
+def export_sections_with_specification(
+    *,
+    sections: list[DocumentSection] | list[SectionChunk] | None,
+    specification: SpecificationResponse | None,
+    source_filename: str | None = None,
+    export_dir: Path | None = None,
+    filename_hash: str | None = None,
+) -> Path | None:
+    """Persist sections and specification into a single JSON file.
+
+    The resulting file name is based on the provided ``filename_hash`` when supplied
+    (``<hash>.json``). Otherwise, it falls back to a sanitized source stem with a
+    ``_sections.json`` suffix. Content is stored in UTF-8 inside the export
+    directory, which is created if missing.
+    """
+
+    if not sections and not specification:
+        return None
+
+    base_directory = _resolve_export_dir(export_dir)
+
+    def _normalize_section(item: DocumentSection | SectionChunk) -> dict[str, object]:
+        return {
+            "number": getattr(item, "number", None),
+            "title": getattr(item, "title", ""),
+            "content": getattr(item, "content", ""),
+        }
+
+    payload = {
+        "source_filename": source_filename,
+        "sections": [_normalize_section(item) for item in sections or []],
+        "specification": specification.dict() if specification else None,
+    }
+
+    if filename_hash:
+        filename = f"{filename_hash}.json"
+        target = base_directory / filename
+    else:
+        stem = Path(source_filename or "document").stem or "document"
+        sanitized_stem = _sanitize(stem)
+        target = _next_available_path(base_directory, f"{sanitized_stem}_sections.json")
+
+    target.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return target
+
+def import_sections_with_specification(
+    *,
+    filename_hash: str,
+    export_dir: Path | None = None,
+) -> tuple[list[DocumentSection], SpecificationResponse | None, str] | None:
+    """Load cached sections/specification bundle by hash if it exists."""
+
+    if not filename_hash:
+        return None
+
+    base_directory = _resolve_export_dir(export_dir)
+    candidate = base_directory / f"{filename_hash}.json"
+    if not candidate.exists():
+        return None
+
+    try:
+        raw_payload = candidate.read_text(encoding="utf-8")
+        data = json.loads(raw_payload)
+    except (OSError, json.JSONDecodeError):
+        return None
+
+    sections_data = data.get("sections") or []
+    specification_data = data.get("specification")
+
+    sections = [
+        DocumentSection(
+            number=item.get("number"),
+            title=item.get("title", ""),
+            content=item.get("content", ""),
+            filename=None,
+        )
+        for item in sections_data
+        if isinstance(item, dict)
+    ]
+
+    specification = None
+    if isinstance(specification_data, dict):
+        try:
+            specification = SpecificationResponse.parse_obj(specification_data)
+        except Exception:  # pragma: no cover - defensive parsing
+            specification = None
+
+    return sections, specification, raw_payload
 
 __all__ = [
     "SectionChunk",
     "split_into_sections",
     "export_sections_to_txt",
     "export_sections_bundle",
+    "export_sections_with_specification",
+    "import_sections_with_specification",
     "build_sections_instruction",
 ]

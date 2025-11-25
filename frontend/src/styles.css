@@ -698,6 +698,22 @@ body {
   align-items: center;
 }
 
+.instruction-panel__select {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+}
+
+.instruction-panel__select select {
+  padding: 0.35rem 0.5rem;
+  border-radius: 0.45rem;
+  border: 1px solid var(--panel-border);
+  background: #ffffff;
+  min-width: 180px;
+}
+
 .instruction-panel__submit {
   align-self: center;
 }
